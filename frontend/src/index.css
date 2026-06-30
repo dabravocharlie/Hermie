@@ -1,0 +1,124 @@
+/* ---------------------------------------------------------------------------
+   Hermie design system
+   Light is the default. [data-theme="dark"] on <html> flips everything.
+   The look: clean light surfaces, deep-indigo ink (never pure black),
+   electric-violet accent that blooms, soft glow that comes alive in dark.
+--------------------------------------------------------------------------- */
+
+:root {
+  --bg: #F7F8FD;
+  --card: #FFFFFF;
+  --card-bd: rgba(110, 46, 245, 0.16);
+  --ink: #232752;
+  --ink-soft: #6E72A0;
+  --violet: #6E2EF5;
+  --violet-soft: rgba(110, 46, 245, 0.28);
+  --violet-glow: rgba(110, 46, 245, 0.14);
+  --cyan: #00BCD9;
+  --green: #00B36A;
+  --green-soft: rgba(0, 179, 106, 0.22);
+  --track: #ECEAFB;
+  --nav-bg: #FFFFFF;
+  --nav-off: #9A9EC4;
+  --divider: rgba(35, 39, 82, 0.10);
+  --bezel: #E3E5F2;
+  --hcard-bg: #F4F0FF;
+  --hcard-bd: rgba(110, 46, 245, 0.28);
+  --hname: #5B23C7;
+  --htext: #36215E;
+  --hdisc: #8A6BD0;
+  --amber-bg: rgba(232, 147, 12, 0.12);
+  --amber: #B8730A;
+  --amber-bd: rgba(232, 147, 12, 0.32);
+  --gbg: rgba(0, 179, 106, 0.12);
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html[data-theme="dark"] {
+  --bg: #06070F;
+  --card: #0C1022;
+  --card-bd: rgba(150, 90, 255, 0.30);
+  --ink: #EAF6FF;
+  --ink-soft: #7E8AB0;
+  --violet: #C39BFF;
+  --violet-soft: rgba(150, 90, 255, 0.55);
+  --violet-glow: rgba(150, 90, 255, 0.18);
+  --cyan: #22E4FF;
+  --green: #3DF5A0;
+  --green-soft: rgba(61, 245, 160, 0.35);
+  --track: #141A30;
+  --nav-bg: #080A16;
+  --nav-off: #5B6486;
+  --divider: rgba(126, 138, 176, 0.16);
+  --bezel: #05060E;
+  --hcard-bg: #0E0A22;
+  --hcard-bd: rgba(177, 78, 255, 0.45);
+  --hname: #D9B6FF;
+  --htext: #EADCFF;
+  --hdisc: #9A6BD6;
+  --amber-bg: rgba(239, 159, 39, 0.12);
+  --amber: #FBC36B;
+  --amber-bd: rgba(239, 159, 39, 0.32);
+  --gbg: rgba(61, 245, 160, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* App is a centered single column that feels like a phone on the web
+   and goes edge-to-edge inside the native wrapper. */
+.app-shell {
+  max-width: 460px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--bg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 88px; /* room for the tab bar */
+}
+
+.glow-violet {
+  text-shadow: 0 0 16px var(--violet-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
