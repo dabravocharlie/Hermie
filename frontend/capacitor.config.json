@@ -1,0 +1,8 @@
+{
+  "appId": "com.galaxia.hermie",
+  "appName": "Hermie",
+  "webDir": "dist",
+  "backgroundColor": "#F7F8FD",
+  "ios": { "contentInset": "always" },
+  "android": { "backgroundColor": "#F7F8FD" }
+}

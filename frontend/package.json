@@ -6,14 +6,23 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:sync": "vite build && npx cap sync",
+    "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor '#6E2EF5' --iconBackgroundColorDark '#6E2EF5' --splashBackgroundColor '#F7F8FD' --splashBackgroundColorDark '#06070F'",
+    "cap:android": "vite build && npx cap sync android && npx cap open android",
+    "cap:ios": "vite build && npx cap sync ios && npx cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
     "@clerk/clerk-react": "^5.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.0"
   }

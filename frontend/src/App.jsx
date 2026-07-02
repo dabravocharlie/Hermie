@@ -4,6 +4,7 @@ import { useTheme, ThemeToggle } from "./components/ThemeToggle.jsx";
 import TabBar from "./components/TabBar.jsx";
 import HermieButton from "./components/HermieButton.jsx";
 import HermiePanel from "./components/HermiePanel.jsx";
+import AboutModal from "./components/AboutModal.jsx";
 import Wings from "./components/Wings.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Bills from "./pages/Bills.jsx";
@@ -97,6 +98,7 @@ function MainApp({ theme, onToggle }) {
   const { user } = useUser();
   const [tab, setTab] = useState("home");
   const [hermieOpen, setHermieOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const Page = PAGES[tab];
 
   return (
@@ -124,6 +126,13 @@ function MainApp({ theme, onToggle }) {
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={() => setAboutOpen(true)}
+            aria-label="About and legal"
+            style={{ width: 36, height: 36, borderRadius: "50%", background: "transparent", border: "1px solid var(--divider)", color: "var(--ink-soft)", fontSize: 15, fontWeight: 600 }}
+          >
+            {"\u2139"}
+          </button>
           <ThemeToggle theme={theme} onToggle={onToggle} />
           <UserButton afterSignOutUrl="/" />
         </div>
@@ -135,6 +144,7 @@ function MainApp({ theme, onToggle }) {
 
       <HermieButton onClick={() => setHermieOpen(true)} />
       <HermiePanel open={hermieOpen} onClose={() => setHermieOpen(false)} />
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <TabBar active={tab} onChange={setTab} />
     </div>
   );
