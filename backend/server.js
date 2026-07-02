@@ -4,6 +4,9 @@ import dotenv from "dotenv";
 import { clerkMiddleware } from "@clerk/express";
 import { requireUser } from "./middleware/auth.js";
 import { pool } from "./db.js";
+import incomeRouter from "./routes/income.js";
+import expensesRouter from "./routes/expenses.js";
+import summaryRouter from "./routes/summary.js";
 
 dotenv.config();
 
@@ -49,9 +52,11 @@ app.get("/api/me", requireUser, (req, res) => {
   res.json({ userId: req.userId });
 });
 
-// Phase 2+ route modules will be mounted here, e.g.:
-// import billsRouter from "./routes/bills.js";
-// app.use("/api/bills", requireUser, billsRouter);
+// Phase 2 — Bills & Income. Every route requires a signed-in user and is
+// scoped to that user inside the route handlers.
+app.use("/api/income", requireUser, incomeRouter);
+app.use("/api/expenses", requireUser, expensesRouter);
+app.use("/api/summary", requireUser, summaryRouter);
 
 app.listen(PORT, () => {
   console.log(`Hermie API listening on port ${PORT}`);
