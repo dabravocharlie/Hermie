@@ -7,6 +7,8 @@ import { pool } from "./db.js";
 import incomeRouter from "./routes/income.js";
 import expensesRouter from "./routes/expenses.js";
 import summaryRouter from "./routes/summary.js";
+import holdingsRouter from "./routes/holdings.js";
+import portfolioRouter from "./routes/portfolio.js";
 
 dotenv.config();
 
@@ -57,6 +59,10 @@ app.get("/api/me", requireUser, (req, res) => {
 app.use("/api/income", requireUser, incomeRouter);
 app.use("/api/expenses", requireUser, expensesRouter);
 app.use("/api/summary", requireUser, summaryRouter);
+
+// Phase 4 — Portfolio. Holdings CRUD + live-price enrichment + news.
+app.use("/api/holdings", requireUser, holdingsRouter);
+app.use("/api/portfolio", requireUser, portfolioRouter);
 
 app.listen(PORT, () => {
   console.log(`Hermie API listening on port ${PORT}`);

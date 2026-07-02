@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [pt, setPt] = useState(null); // portfolio totals for the "today" tile
 
   async function load() {
     try {
@@ -27,6 +28,20 @@ export default function Dashboard() {
   }
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Separate + non-blocking: a slow or missing price feed must never break
+    // the rest of the dashboard.
+    (async () => {
+      try {
+        const p = await api.get("/api/portfolio");
+        if (p && p.totals) setPt(p.totals);
+      } catch {
+        /* leave the tile as a placeholder */
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,11 +93,22 @@ export default function Dashboard() {
           <p className="mono" style={{ fontSize: 22, fontWeight: 500, margin: "6px 0 0", color: "var(--ink)" }}>{thisWeek.length}</p>
           <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>{formatCurrency(weekSum)} due</p>
         </div>
-        <div style={{ flex: 1, background: "var(--card)", border: "1px solid var(--green-soft)", borderRadius: 18, padding: "14px 16px", boxShadow: "0 0 16px var(--green-soft)" }}>
-          <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>Portfolio today</p>
-          <p className="mono" style={{ fontSize: 22, fontWeight: 500, margin: "6px 0 0", color: "var(--green)" }}>{"\u2014"}</p>
-          <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>Set up in Portfolio</p>
-        </div>
+        {(() => {
+          const up = pt ? pt.todayChange >= 0 : true;
+          const col = pt && pt.todayChange < 0 ? "var(--amber)" : "var(--green)";
+          const bd = pt && pt.todayChange < 0 ? "var(--amber-bd)" : "var(--green-soft)";
+          return (
+            <div style={{ flex: 1, background: "var(--card)", border: `1px solid ${bd}`, borderRadius: 18, padding: "14px 16px", boxShadow: "0 0 16px var(--green-soft)" }}>
+              <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>Portfolio today</p>
+              <p className="mono" style={{ fontSize: 22, fontWeight: 500, margin: "6px 0 0", color: pt ? col : "var(--green)" }}>
+                {pt ? `${up ? "+" : ""}${formatCurrency(pt.todayChange)}` : "\u2014"}
+              </p>
+              <p style={{ fontSize: 12, color: pt ? col : "var(--ink-soft)", marginTop: 2 }}>
+                {pt ? `${up ? "+" : ""}${pt.todayChangePct.toFixed(1)}%` : "Set up in Portfolio"}
+              </p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Hermie insight */}
