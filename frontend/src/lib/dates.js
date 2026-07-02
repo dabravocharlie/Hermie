@@ -28,7 +28,23 @@ export function dueLabel(days) {
   return `Due in ${days} days`;
 }
 
-// Attach next due date + days-until to each expense that has a due_day,
+// Parse a 'YYYY-MM-DD' (or ISO) string into a local Date at midnight,
+// avoiding the timezone off-by-one that comes from new Date("YYYY-MM-DD").
+export function parseDateLocal(s) {
+  if (!s) return null;
+  const [y, m, d] = s.slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// Countdown label for an upcoming (or past) date.
+export function whenLabel(days) {
+  if (days < 0) return `${Math.abs(days)}d ago`;
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days <= 14) return `in ${days} days`;
+  return `in ${days} days`;
+}
+
 // and return them sorted soonest-first.
 export function upcomingBills(expenses, from = new Date()) {
   return expenses

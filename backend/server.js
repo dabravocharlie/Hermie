@@ -9,6 +9,7 @@ import expensesRouter from "./routes/expenses.js";
 import summaryRouter from "./routes/summary.js";
 import holdingsRouter from "./routes/holdings.js";
 import portfolioRouter from "./routes/portfolio.js";
+import eventsRouter from "./routes/events.js";
 
 dotenv.config();
 
@@ -63,6 +64,9 @@ app.use("/api/summary", requireUser, summaryRouter);
 // Phase 4 — Portfolio. Holdings CRUD + live-price enrichment + news.
 app.use("/api/holdings", requireUser, holdingsRouter);
 app.use("/api/portfolio", requireUser, portfolioRouter);
+
+// Phase 5 — Calendar. Reminders for IPOs, bills, and appointments.
+app.use("/api/events", requireUser, eventsRouter);
 
 app.listen(PORT, () => {
   console.log(`Hermie API listening on port ${PORT}`);

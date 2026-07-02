@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import Wings from "../components/Wings.jsx";
 import { formatCurrency, categoryMeta } from "../lib/money.js";
-import { upcomingBills, dueLabel } from "../lib/dates.js";
+import { upcomingBills, dueLabel, parseDateLocal, daysUntil, whenLabel } from "../lib/dates.js";
 import { buildInsight } from "../lib/insight.js";
+
+const EVENT_EMOJI = { ipo: "\u{1F680}", bill: "\u{1F4B3}", appointment: "\u{1F4C5}", reminder: "\u{1F514}" };
 
 export default function Dashboard() {
   const api = useApi();
   const [summary, setSummary] = useState(null);
   const [expenses, setExpenses] = useState([]);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [pt, setPt] = useState(null); // portfolio totals for the "today" tile
@@ -16,9 +19,14 @@ export default function Dashboard() {
   async function load() {
     try {
       setLoading(true);
-      const [sum, exp] = await Promise.all([api.get("/api/summary"), api.get("/api/expenses")]);
+      const [sum, exp, ev] = await Promise.all([
+        api.get("/api/summary"),
+        api.get("/api/expenses"),
+        api.get("/api/events"),
+      ]);
       setSummary(sum);
       setExpenses(exp);
+      setEvents(ev);
       setErr("");
     } catch (e) {
       setErr("Couldn't reach your data. If the app was idle it may be waking up.");
@@ -53,6 +61,22 @@ export default function Dashboard() {
   const upcoming = useMemo(() => upcomingBills(expenses), [expenses]);
   const thisWeek = useMemo(() => upcoming.filter((b) => b.days >= 0 && b.days <= 7), [upcoming]);
   const weekSum = useMemo(() => thisWeek.reduce((s, b) => s + (Number(b.amount) || 0), 0), [thisWeek]);
+
+  // Combined agenda for "Coming up": bill due-dates + calendar events.
+  const coming = useMemo(() => {
+    const bills = upcoming.map((b) => ({
+      key: `b${b.id}`, emoji: categoryMeta(b.category).emoji, title: b.name, days: b.days, sub: dueLabel(b.days), amount: b.amount,
+    }));
+    const evs = events
+      .map((e) => {
+        const d = parseDateLocal(e.event_date);
+        const days = daysUntil(d);
+        return { key: `e${e.id}`, emoji: EVENT_EMOJI[e.type] || "\u{1F514}", title: e.title, days, sub: whenLabel(days) };
+      })
+      .filter((e) => e.days >= 0);
+    return [...bills, ...evs].sort((a, b) => a.days - b.days);
+  }, [upcoming, events]);
+
   const insight = buildInsight(summary || {});
 
   if (err) {
@@ -126,22 +150,19 @@ export default function Dashboard() {
         <span style={{ fontSize: 14, fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-display)" }}>Coming up</span>
       </div>
       <div>
-        {upcoming.slice(0, 4).map((b) => {
-          const meta = categoryMeta(b.category);
-          return (
-            <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 4px", borderBottom: "1px solid var(--divider)" }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--hcard-bg)", border: "1px solid var(--hcard-bd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{meta.emoji}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 14, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</p>
-                <p style={{ fontSize: 12, color: b.days <= 3 ? "var(--amber)" : "var(--ink-soft)", marginTop: 1 }}>{dueLabel(b.days)}</p>
-              </div>
-              <span className="mono" style={{ fontSize: 14, color: "var(--ink)" }}>{formatCurrency(b.amount, true)}</span>
+        {coming.slice(0, 4).map((it) => (
+          <div key={it.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 4px", borderBottom: "1px solid var(--divider)" }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--hcard-bg)", border: "1px solid var(--hcard-bd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{it.emoji}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</p>
+              <p style={{ fontSize: 12, color: it.days <= 3 ? "var(--amber)" : "var(--ink-soft)", marginTop: 1 }}>{it.sub}</p>
             </div>
-          );
-        })}
-        {!upcoming.length && (
+            {it.amount ? <span className="mono" style={{ fontSize: 14, color: "var(--ink)" }}>{formatCurrency(it.amount, true)}</span> : null}
+          </div>
+        ))}
+        {!coming.length && (
           <p style={{ fontSize: 13, color: "var(--ink-soft)", padding: "12px 4px" }}>
-            Nothing scheduled yet. Add a due day to your bills in the Bills tab and they'll show up here with a countdown.
+            Nothing scheduled yet. Add due dates to bills or events in the Calendar and they'll show up here with a countdown.
           </p>
         )}
       </div>
