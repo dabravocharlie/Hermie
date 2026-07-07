@@ -56,10 +56,10 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const income = summary?.monthlyIncome || 0;
+  const incomeTotal = summary?.monthlyIncome || 0;
   const bills = summary?.monthlyExpenses || 0;
   const safe = summary?.safeToSpend || 0;
-  const committedPct = income > 0 ? Math.min(100, Math.round((bills / income) * 100)) : 0;
+  const committedPct = incomeTotal > 0 ? Math.min(100, Math.round((bills / incomeTotal) * 100)) : 0;
 
   const upcoming = useMemo(() => upcomingBills(expenses), [expenses]);
   const thisWeek = useMemo(() => upcoming.filter((b) => b.days >= 0 && b.days <= 7), [upcoming]);
@@ -112,7 +112,7 @@ export default function Dashboard() {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 12, color: "var(--ink-soft)" }}>
           <span><span style={{ color: "var(--violet)" }}>&#9679;</span> Bills {formatCurrency(bills)}</span>
-          <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income {formatCurrency(income)}</span>
+          <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income {formatCurrency(incomeTotal)}</span>
         </div>
       </div>
 
