@@ -1,6 +1,6 @@
 import Wings from "./Wings.jsx";
 
-export default function AboutModal({ open, onClose }) {
+export default function AboutModal({ open, onClose, onReplay }) {
   if (!open) return null;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const openDoc = (path) => window.open(`${origin}${path}`, "_blank");
@@ -32,6 +32,9 @@ export default function AboutModal({ open, onClose }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
           <button onClick={() => openDoc("/privacy.html")} style={{ height: 44, borderRadius: 12, border: "1px solid var(--divider)", background: "transparent", color: "var(--violet)", fontSize: 15, fontWeight: 500 }}>Privacy Policy</button>
           <button onClick={() => openDoc("/terms.html")} style={{ height: 44, borderRadius: 12, border: "1px solid var(--divider)", background: "transparent", color: "var(--violet)", fontSize: 15, fontWeight: 500 }}>Terms of Use</button>
+          {onReplay && (
+            <button onClick={onReplay} style={{ height: 44, borderRadius: 12, border: "1px solid var(--divider)", background: "transparent", color: "var(--violet)", fontSize: 15, fontWeight: 500 }}>Replay tutorial</button>
+          )}
           <button onClick={onClose} style={{ height: 44, borderRadius: 12, border: "none", background: "var(--violet)", color: "#fff", fontSize: 15, fontWeight: 500 }}>Close</button>
         </div>
       </div>

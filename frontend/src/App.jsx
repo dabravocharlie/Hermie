@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SignedIn, SignedOut, SignIn, UserButton, useUser } from "@clerk/clerk-react";
+import { useApi } from "./lib/api.js";
 import { useTheme, ThemeToggle } from "./components/ThemeToggle.jsx";
 import TabBar from "./components/TabBar.jsx";
 import HermieButton from "./components/HermieButton.jsx";
 import HermiePanel from "./components/HermiePanel.jsx";
 import AboutModal from "./components/AboutModal.jsx";
+import WelcomeCarousel from "./components/WelcomeCarousel.jsx";
 import Wings from "./components/Wings.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Bills from "./pages/Bills.jsx";
@@ -96,10 +98,34 @@ function SignInScreen({ theme, onToggle }) {
 
 function MainApp({ theme, onToggle }) {
   const { user } = useUser();
+  const api = useApi();
   const [tab, setTab] = useState("home");
   const [hermieOpen, setHermieOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const Page = PAGES[tab];
+
+  // First-login check: show the tutorial if this account hasn't seen it.
+  useEffect(() => {
+    (async () => {
+      try {
+        const p = await api.get("/api/profile");
+        if (p && !p.tutorialSeen) setShowTutorial(true);
+      } catch {
+        /* on error, don't interrupt the user; they'll see it next load */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function finishTutorial() {
+    setShowTutorial(false);
+    api.post("/api/profile/tutorial-seen").catch(() => {});
+  }
+  function replayTutorial() {
+    setAboutOpen(false);
+    setShowTutorial(true);
+  }
 
   return (
     <div className="app-shell">
@@ -144,7 +170,8 @@ function MainApp({ theme, onToggle }) {
 
       <HermieButton onClick={() => setHermieOpen(true)} />
       <HermiePanel open={hermieOpen} onClose={() => setHermieOpen(false)} />
-      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} onReplay={replayTutorial} />
+      <WelcomeCarousel open={showTutorial} onFinish={finishTutorial} />
       <TabBar active={tab} onChange={setTab} />
     </div>
   );

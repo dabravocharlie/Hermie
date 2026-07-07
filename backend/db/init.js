@@ -17,6 +17,9 @@ const statements = [
     last_seen    TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
 
+  // Whether the user has seen the welcome tutorial (follows them across devices).
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_seen BOOLEAN NOT NULL DEFAULT false`,
+
   // Income: how much, how often, when next paid.
   `CREATE TABLE IF NOT EXISTS income_sources (
     id           SERIAL PRIMARY KEY,
