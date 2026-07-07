@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import Wings from "../components/Wings.jsx";
 import { formatCurrency, categoryMeta } from "../lib/money.js";
-import { upcomingBills, dueLabel, parseDateLocal, daysUntil, whenLabel } from "../lib/dates.js";
+import { upcomingBills, upcomingPaydays, dueLabel, parseDateLocal, daysUntil, whenLabel } from "../lib/dates.js";
 import { buildInsight } from "../lib/insight.js";
 
 const EVENT_EMOJI = { ipo: "\u{1F680}", bill: "\u{1F4B3}", appointment: "\u{1F4C5}", reminder: "\u{1F514}" };
@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [events, setEvents] = useState([]);
+  const [income, setIncome] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [pt, setPt] = useState(null); // portfolio totals for the "today" tile
@@ -19,14 +20,16 @@ export default function Dashboard() {
   async function load() {
     try {
       setLoading(true);
-      const [sum, exp, ev] = await Promise.all([
+      const [sum, exp, ev, inc] = await Promise.all([
         api.get("/api/summary"),
         api.get("/api/expenses"),
         api.get("/api/events"),
+        api.get("/api/income"),
       ]);
       setSummary(sum);
       setExpenses(exp);
       setEvents(ev);
+      setIncome(inc);
       setErr("");
     } catch (e) {
       setErr("Couldn't reach your data. If the app was idle it may be waking up.");
@@ -74,8 +77,11 @@ export default function Dashboard() {
         return { key: `e${e.id}`, emoji: EVENT_EMOJI[e.type] || "\u{1F514}", title: e.title, days, sub: whenLabel(days) };
       })
       .filter((e) => e.days >= 0);
-    return [...bills, ...evs].sort((a, b) => a.days - b.days);
-  }, [upcoming, events]);
+    const pay = upcomingPaydays(income).map((p) => ({
+      key: `p${p.id}`, emoji: "\u{1F4B5}", title: p.name, days: p.days, sub: whenLabel(p.days), amount: p.amount,
+    }));
+    return [...bills, ...evs, ...pay].sort((a, b) => a.days - b.days);
+  }, [upcoming, events, income]);
 
   const insight = buildInsight(summary || {});
 

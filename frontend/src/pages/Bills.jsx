@@ -8,58 +8,31 @@ import {
   CATEGORIES,
   categoryMeta,
 } from "../lib/money.js";
+import { nextPayday } from "../lib/dates.js";
 
 const input = {
-  width: "100%",
-  height: 44,
-  borderRadius: 12,
-  border: "1px solid var(--divider)",
-  background: "var(--card)",
-  color: "var(--ink)",
-  padding: "0 14px",
-  fontSize: 15,
+  width: "100%", height: 44, borderRadius: 12, border: "1px solid var(--divider)",
+  background: "var(--card)", color: "var(--ink)", padding: "0 14px", fontSize: 15,
 };
 const labelText = { fontSize: 12, color: "var(--ink-soft)", marginBottom: 6, display: "block" };
-const primaryBtn = {
-  height: 44,
-  borderRadius: 12,
-  border: "none",
-  background: "var(--violet)",
-  color: "#fff",
-  fontSize: 15,
-  fontWeight: 500,
-  flex: 1,
-};
-const ghostBtn = {
-  height: 44,
-  borderRadius: 12,
-  border: "1px solid var(--divider)",
-  background: "transparent",
-  color: "var(--ink-soft)",
-  fontSize: 15,
-  flex: 1,
-};
+const primaryBtn = { height: 44, borderRadius: 12, border: "none", background: "var(--violet)", color: "#fff", fontSize: 15, fontWeight: 500, flex: 1 };
+const ghostBtn = { height: 44, borderRadius: 12, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 15, flex: 1 };
+
+const CAT_KEYS = CATEGORIES.map((c) => c.key);
 
 function SectionCard({ children }) {
   return (
-    <div
-      style={{
-        background: "var(--card)",
-        border: "1px solid var(--card-bd)",
-        borderRadius: 20,
-        padding: 18,
-        boxShadow: "0 0 22px var(--violet-glow)",
-      }}
-    >
+    <div style={{ background: "var(--card)", border: "1px solid var(--card-bd)", borderRadius: 20, padding: 18, boxShadow: "0 0 22px var(--violet-glow)" }}>
       {children}
     </div>
   );
 }
 
-function IncomeForm({ onSave, onCancel }) {
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [frequency, setFrequency] = useState("biweekly");
+function IncomeForm({ initial, onSave, onCancel }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
+  const [frequency, setFrequency] = useState(initial?.frequency || "biweekly");
+  const [payDate, setPayDate] = useState(initial?.next_date ? initial.next_date.slice(0, 10) : "");
   const [busy, setBusy] = useState(false);
 
   async function submit(e) {
@@ -67,7 +40,7 @@ function IncomeForm({ onSave, onCancel }) {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      await onSave({ name, amount, frequency });
+      await onSave({ name, amount, frequency, next_date: payDate || null });
       onCancel();
     } finally {
       setBusy(false);
@@ -88,28 +61,32 @@ function IncomeForm({ onSave, onCancel }) {
         <div style={{ flex: 1 }}>
           <label style={labelText}>How often</label>
           <select style={input} value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-            {FREQUENCIES.map((f) => (
-              <option key={f.key} value={f.key}>{f.label}</option>
-            ))}
+            {FREQUENCIES.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
         </div>
       </div>
+      <div>
+        <label style={labelText}>Next payday (optional)</label>
+        <input style={input} type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+        <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 5 }}>Set this to see your paydays on the calendar and home screen.</p>
+      </div>
       <div style={{ display: "flex", gap: 12 }}>
         <button type="button" style={ghostBtn} onClick={onCancel}>Cancel</button>
-        <button type="submit" style={primaryBtn} disabled={busy}>{busy ? "Saving..." : "Save income"}</button>
+        <button type="submit" style={primaryBtn} disabled={busy}>{busy ? "Saving..." : initial ? "Save changes" : "Save income"}</button>
       </div>
     </form>
   );
 }
 
-function ExpenseForm({ onSave, onCancel }) {
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("housing");
-  const [customLabel, setCustomLabel] = useState("");
-  const [amount, setAmount] = useState("");
-  const [frequency, setFrequency] = useState("monthly");
-  const [dueDay, setDueDay] = useState("");
-  const [autopay, setAutopay] = useState(false);
+function ExpenseForm({ initial, onSave, onCancel }) {
+  const initCustom = initial && !CAT_KEYS.includes(initial.category);
+  const [name, setName] = useState(initial?.name || "");
+  const [category, setCategory] = useState(initial ? (initCustom ? "custom" : initial.category) : "housing");
+  const [customLabel, setCustomLabel] = useState(initCustom ? initial.category : "");
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
+  const [frequency, setFrequency] = useState(initial?.frequency || "monthly");
+  const [dueDay, setDueDay] = useState(initial?.due_day ? String(initial.due_day) : "");
+  const [autopay, setAutopay] = useState(initial?.autopay || false);
   const [busy, setBusy] = useState(false);
 
   async function submit(e) {
@@ -134,9 +111,7 @@ function ExpenseForm({ onSave, onCancel }) {
       <div>
         <label style={labelText}>Category</label>
         <select style={input} value={category} onChange={(e) => setCategory(e.target.value)}>
-          {CATEGORIES.map((c) => (
-            <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>
-          ))}
+          {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>)}
           <option value="custom">+ Custom category</option>
         </select>
       </div>
@@ -154,9 +129,7 @@ function ExpenseForm({ onSave, onCancel }) {
         <div style={{ flex: 1 }}>
           <label style={labelText}>How often</label>
           <select style={input} value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-            {FREQUENCIES.map((f) => (
-              <option key={f.key} value={f.key}>{f.label}</option>
-            ))}
+            {FREQUENCIES.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
         </div>
       </div>
@@ -172,26 +145,32 @@ function ExpenseForm({ onSave, onCancel }) {
       </div>
       <div style={{ display: "flex", gap: 12 }}>
         <button type="button" style={ghostBtn} onClick={onCancel}>Cancel</button>
-        <button type="submit" style={primaryBtn} disabled={busy}>{busy ? "Saving..." : "Save bill"}</button>
+        <button type="submit" style={primaryBtn} disabled={busy}>{busy ? "Saving..." : initial ? "Save changes" : "Save bill"}</button>
       </div>
     </form>
   );
 }
 
-function Row({ left, sub, amount, freq, onDelete }) {
+function Row({ left, sub, amount, freq, onEdit, onDelete }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <button onClick={onEdit} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
         <p style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{left}</p>
         {sub && <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 1 }}>{sub}</p>}
-      </div>
-      <div style={{ textAlign: "right" }}>
+      </button>
+      <button onClick={onEdit} style={{ textAlign: "right", background: "transparent", border: "none", cursor: "pointer" }}>
         <p className="mono" style={{ fontSize: 15, color: "var(--ink)" }}>{formatCurrency(amount, true)}</p>
         <p style={{ fontSize: 11, color: "var(--ink-soft)" }}>{freqShort(freq)}</p>
-      </div>
+      </button>
       <button onClick={onDelete} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 20, padding: "0 2px", lineHeight: 1 }}>{"\u00D7"}</button>
     </div>
   );
+}
+
+function payText(i) {
+  if (!i.next_date) return null;
+  const d = nextPayday(i.next_date, i.frequency);
+  return d ? "Next payday " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
 }
 
 export default function Bills() {
@@ -200,8 +179,8 @@ export default function Bills() {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [showIncome, setShowIncome] = useState(false);
-  const [showExpense, setShowExpense] = useState(false);
+  const [incForm, setIncForm] = useState(null); // {mode:'new'} | {mode:'edit', item}
+  const [expForm, setExpForm] = useState(null);
 
   async function load() {
     try {
@@ -225,17 +204,19 @@ export default function Bills() {
   const monthlyExpenses = useMemo(() => expenses.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0), [expenses]);
   const safe = monthlyIncome - monthlyExpenses;
 
-  async function addIncome(data) {
-    const row = await api.post("/api/income", data);
-    setIncome((p) => [row, ...p]);
+  async function saveIncome(data) {
+    if (incForm?.mode === "edit") await api.put(`/api/income/${incForm.item.id}`, data);
+    else await api.post("/api/income", data);
+    await load();
   }
   async function delIncome(id) {
     await api.del(`/api/income/${id}`);
     setIncome((p) => p.filter((r) => r.id !== id));
   }
-  async function addExpense(data) {
-    const row = await api.post("/api/expenses", data);
-    setExpenses((p) => [row, ...p]);
+  async function saveExpense(data) {
+    if (expForm?.mode === "edit") await api.put(`/api/expenses/${expForm.item.id}`, data);
+    else await api.post("/api/expenses", data);
+    await load();
   }
   async function delExpense(id) {
     await api.del(`/api/expenses/${id}`);
@@ -269,44 +250,37 @@ export default function Bills() {
       <SectionCard>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, color: "var(--ink)" }}>Income</span>
-          {!showIncome && (
-            <button onClick={() => setShowIncome(true)} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>
-          )}
+          {!incForm && <button onClick={() => setIncForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
         </div>
         {income.map((r) => (
-          <Row key={r.id} left={r.name} amount={r.amount} freq={r.frequency} onDelete={() => delIncome(r.id)} />
+          <Row key={r.id} left={r.name} sub={payText(r)} amount={r.amount} freq={r.frequency}
+            onEdit={() => setIncForm({ mode: "edit", item: r })} onDelete={() => delIncome(r.id)} />
         ))}
-        {!income.length && !showIncome && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add your paychecks so Hermie knows what's coming in.</p>}
-        {showIncome && <IncomeForm onSave={addIncome} onCancel={() => setShowIncome(false)} />}
+        {!income.length && !incForm && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add your paychecks so Hermie knows what's coming in.</p>}
+        {incForm && <IncomeForm initial={incForm.mode === "edit" ? incForm.item : null} onSave={saveIncome} onCancel={() => setIncForm(null)} />}
       </SectionCard>
 
       {/* Expenses */}
       <SectionCard>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, color: "var(--ink)" }}>Bills & expenses</span>
-          {!showExpense && (
-            <button onClick={() => setShowExpense(true)} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>
-          )}
+          {!expForm && <button onClick={() => setExpForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
         </div>
         {expenses.map((r) => {
           const meta = categoryMeta(r.category);
           return (
-            <Row
-              key={r.id}
-              left={`${meta.emoji}  ${r.name}`}
+            <Row key={r.id} left={`${meta.emoji}  ${r.name}`}
               sub={meta.label + (r.due_day ? ` \u00B7 due the ${r.due_day}` : "") + (r.autopay ? " \u00B7 autopay" : "")}
-              amount={r.amount}
-              freq={r.frequency}
-              onDelete={() => delExpense(r.id)}
-            />
+              amount={r.amount} freq={r.frequency}
+              onEdit={() => setExpForm({ mode: "edit", item: r })} onDelete={() => delExpense(r.id)} />
           );
         })}
-        {!expenses.length && !showExpense && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add rent, car, utilities, subscriptions \u2014 anything that goes out.</p>}
-        {showExpense && <ExpenseForm onSave={addExpense} onCancel={() => setShowExpense(false)} />}
+        {!expenses.length && !expForm && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add rent, car, utilities, subscriptions \u2014 anything that goes out.</p>}
+        {expForm && <ExpenseForm initial={expForm.mode === "edit" ? expForm.item : null} onSave={saveExpense} onCancel={() => setExpForm(null)} />}
       </SectionCard>
 
       <p style={{ fontSize: 11, color: "var(--ink-soft)", textAlign: "center", padding: "4px 20px" }}>
-        Hermie uses these numbers to explain your cash flow. Educational, not financial advice.
+        Tap any row to edit it. Educational, not financial advice.
       </p>
     </div>
   );

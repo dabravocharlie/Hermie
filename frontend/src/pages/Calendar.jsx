@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import { formatCurrency } from "../lib/money.js";
-import { upcomingBills, parseDateLocal, daysUntil, whenLabel } from "../lib/dates.js";
+import { upcomingBills, upcomingPaydays, parseDateLocal, daysUntil, whenLabel } from "../lib/dates.js";
 
 const input = {
   width: "100%", height: 44, borderRadius: 12, border: "1px solid var(--divider)",
@@ -74,6 +74,7 @@ export default function Calendar() {
   const api = useApi();
   const [events, setEvents] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [income, setIncome] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -81,9 +82,10 @@ export default function Calendar() {
   async function load() {
     try {
       setLoading(true);
-      const [ev, exp] = await Promise.all([api.get("/api/events"), api.get("/api/expenses")]);
+      const [ev, exp, inc] = await Promise.all([api.get("/api/events"), api.get("/api/expenses"), api.get("/api/income")]);
       setEvents(ev);
       setExpenses(exp);
+      setIncome(inc);
       setErr("");
     } catch (e) {
       setErr("Couldn't load your calendar. If the app was idle it may be waking up.");
@@ -105,17 +107,20 @@ export default function Calendar() {
     setEvents((p) => p.filter((e) => e.id !== id));
   }
 
-  // Merge manual events with auto bill due-dates into one sorted agenda.
+  // Merge manual events with auto bill due-dates and paydays into one agenda.
   const items = useMemo(() => {
     const manual = events.map((e) => {
       const date = parseDateLocal(e.event_date);
       return { key: `e${e.id}`, id: e.id, title: e.title, type: e.type, notes: e.notes, date, days: daysUntil(date), manual: true };
     });
     const bills = upcomingBills(expenses).map((b) => ({
-      key: `b${b.id}`, title: `${b.name} due`, type: "bill", date: b.dueDate, days: b.days, amount: b.amount, manual: false,
+      key: `b${b.id}`, title: `${b.name} due`, type: "bill", date: b.dueDate, days: b.days, amount: b.amount, manual: false, source: "Bills",
     }));
-    return [...manual, ...bills].filter((i) => i.days >= 0).sort((a, b) => a.days - b.days);
-  }, [events, expenses]);
+    const pay = upcomingPaydays(income).map((p) => ({
+      key: `p${p.id}`, title: `${p.name}`, type: "income", emoji: "\u{1F4B5}", date: p.payDate, days: p.days, amount: p.amount, manual: false, source: "Income",
+    }));
+    return [...manual, ...bills, ...pay].filter((i) => i.days >= 0).sort((a, b) => a.days - b.days);
+  }, [events, expenses, income]);
 
   return (
     <div style={{ padding: "4px 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -135,21 +140,22 @@ export default function Calendar() {
 
       <div style={{ background: "var(--card)", border: "1px solid var(--card-bd)", borderRadius: 20, padding: "6px 18px 10px", boxShadow: "0 0 22px var(--violet-glow)" }}>
         {items.map((it) => {
-          const meta = typeMeta(it.type);
+          const emoji = it.emoji || typeMeta(it.type).emoji;
           const soon = it.days <= 3;
+          const isIncome = it.type === "income";
           return (
             <div key={it.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 0", borderBottom: "1px solid var(--divider)" }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--hcard-bg)", border: "1px solid var(--hcard-bd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{meta.emoji}</div>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--hcard-bg)", border: "1px solid var(--hcard-bd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>{emoji}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</p>
                 <p style={{ fontSize: 12, color: soon ? "var(--amber)" : "var(--ink-soft)", marginTop: 1 }}>
-                  {fmtDate(it.date)} &middot; {whenLabel(it.days)}{!it.manual ? " \u00B7 from Bills" : ""}{it.amount ? ` \u00B7 ${formatCurrency(it.amount, true)}` : ""}
+                  {fmtDate(it.date)} &middot; {whenLabel(it.days)}{!it.manual ? ` \u00B7 from ${it.source}` : ""}{it.amount ? ` \u00B7 ${formatCurrency(it.amount, true)}` : ""}
                 </p>
               </div>
               {it.manual ? (
                 <button onClick={() => delEvent(it.id)} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 20, lineHeight: 1 }}>{"\u00D7"}</button>
               ) : (
-                <span style={{ fontSize: 10, color: "var(--ink-soft)", border: "1px solid var(--divider)", borderRadius: 6, padding: "2px 6px" }}>auto</span>
+                <span style={{ fontSize: 10, color: isIncome ? "var(--green)" : "var(--ink-soft)", border: `1px solid ${isIncome ? "var(--green-soft)" : "var(--divider)"}`, borderRadius: 6, padding: "2px 6px" }}>auto</span>
               )}
             </div>
           );
