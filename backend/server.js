@@ -13,6 +13,7 @@ import eventsRouter from "./routes/events.js";
 import researchRouter from "./routes/research.js";
 import hermieRouter from "./routes/hermie.js";
 import profileRouter from "./routes/profile.js";
+import wishlistRouter from "./routes/wishlist.js";
 
 dotenv.config();
 
@@ -75,6 +76,9 @@ app.use("/api/events", requireUser, eventsRouter);
 app.use("/api/research", requireUser, researchRouter);
 app.use("/api/hermie", requireUser, hermieRouter);
 app.use("/api/profile", requireUser, profileRouter);
+
+// Purchase wishlist \u2014 items the user wants to buy, with budget-fit guidance.
+app.use("/api/wishlist", requireUser, wishlistRouter);
 
 app.listen(PORT, () => {
   console.log(`Hermie API listening on port ${PORT}`);

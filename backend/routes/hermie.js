@@ -21,6 +21,9 @@ You have tools to help the user stay organized. Use them when they ask you to re
 - save_note: save a note to their Research tab (great for observations or things to revisit).
 - add_to_watchlist: add a ticker to their watchlist.
 - add_event: add a calendar reminder (IPO date, bill, appointment).
+- add_to_wishlist: add an item they want to purchase (not a stock) to their purchase wishlist.
+
+The user's snapshot below includes a "Purchase wishlist" if they have one, with a budget-fit note per item (whether it fits their current monthly leftover or roughly how long it'd take to save for). If asked about timing a purchase, describe what the numbers show factually (e.g. "at your current pace you'd have this saved in about 2 months") rather than issuing a directive like "you should buy it now." This is budget math on their own numbers, not investment advice, but keep the same non-directive tone.
 
 You are given the user's current financial snapshot below. Use it to ground your answers, but never repeat it back wholesale unless relevant.`;
 
@@ -61,17 +64,31 @@ const TOOLS = [
       required: ["title", "event_date"],
     },
   },
+  {
+    name: "add_to_wishlist",
+    description: "Add an item to the user's purchase wishlist (things they want to buy, not stocks).",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The item name." },
+        store: { type: "string", description: "Optional store or place to buy it." },
+        cost: { type: "number", description: "Price of the item." },
+      },
+      required: ["name", "cost"],
+    },
+  },
 ];
 
 // Build a compact snapshot of the user's finances for grounding.
 async function buildContext(userId) {
-  const [inc, exp, hold, watch, events, notes] = await Promise.all([
+  const [inc, exp, hold, watch, events, notes, wish] = await Promise.all([
     pool.query("SELECT name, amount, frequency FROM income_sources WHERE user_id = $1", [userId]),
     pool.query("SELECT name, category, amount, frequency, due_day FROM expenses WHERE user_id = $1", [userId]),
     pool.query("SELECT symbol, shares, cost_basis FROM holdings WHERE user_id = $1", [userId]),
     pool.query("SELECT symbol FROM watchlist WHERE user_id = $1", [userId]),
     pool.query("SELECT title, type, event_date FROM calendar_events WHERE user_id = $1 ORDER BY event_date ASC LIMIT 8", [userId]),
     pool.query("SELECT author, symbol, body FROM research_notes WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6", [userId]),
+    pool.query("SELECT name, store, cost FROM wishlist_items WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10", [userId]),
   ]);
 
   const monthlyIncome = inc.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
@@ -90,6 +107,14 @@ async function buildContext(userId) {
   if (watch.rows.length) lines.push("Watchlist: " + watch.rows.map((w) => w.symbol).join(", "));
   if (events.rows.length) lines.push("Upcoming: " + events.rows.map((e) => `${e.title} (${e.type}, ${String(e.event_date).slice(0, 10)})`).join("; "));
   if (notes.rows.length) lines.push("Recent notes: " + notes.rows.map((n) => `[${n.author}] ${n.body}`).join(" | "));
+  if (wish.rows.length) {
+    const monthlyLeft = monthlyIncome - monthlyExpenses;
+    lines.push("Purchase wishlist: " + wish.rows.map((w) => {
+      const cost = Number(w.cost) || 0;
+      const fit = monthlyLeft <= 0 ? "budget is tight right now" : cost <= monthlyLeft ? "fits in this month's leftover budget" : `about ${Math.ceil(cost / monthlyLeft)} months to save at current pace`;
+      return `${w.name}${w.store ? ` (${w.store})` : ""} $${cost.toFixed(0)} [${fit}]`;
+    }).join("; "));
+  }
 
   return lines.join("\n");
 }
@@ -121,6 +146,15 @@ async function runTool(name, input, userId) {
         [userId, String(input.title || "Reminder").trim(), input.type || "reminder", date, input.notes || null]
       );
       return `Added "${input.title}" to the calendar for ${date}.`;
+    }
+    if (name === "add_to_wishlist") {
+      const itemName = String(input.name || "").trim();
+      if (!itemName) return "No item name given.";
+      await pool.query(
+        `INSERT INTO wishlist_items (user_id, name, store, cost) VALUES ($1, $2, $3, $4)`,
+        [userId, itemName, input.store ? String(input.store).trim() : null, Number(input.cost) || 0]
+      );
+      return `Added "${itemName}" to the wishlist.`;
     }
     return "Unknown tool.";
   } catch (e) {

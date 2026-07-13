@@ -83,6 +83,16 @@ const statements = [
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
 
+  // Purchase wishlist: things the user wants to buy (distinct from the stock watchlist).
+  `CREATE TABLE IF NOT EXISTS wishlist_items (
+    id           SERIAL PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    store        TEXT,
+    cost         NUMERIC(12,2) NOT NULL DEFAULT 0,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+
   // Hermie conversation memory (per user). role = 'user' | 'assistant'.
   `CREATE TABLE IF NOT EXISTS hermie_messages (
     id           SERIAL PRIMARY KEY,
@@ -99,6 +109,7 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS idx_watchlist_user   ON watchlist(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_notes_user       ON research_notes(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_events_user      ON calendar_events(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_wishlist_user     ON wishlist_items(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_messages_user    ON hermie_messages(user_id, created_at)`,
 ];
 
