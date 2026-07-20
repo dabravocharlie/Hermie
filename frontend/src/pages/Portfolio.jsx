@@ -39,7 +39,7 @@ function AddForm({ onSave, onCancel }) {
     }
   }
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginTop: 14 }}>
+    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginBottom: 14 }}>
       <div>
         <label style={label}>Symbol</label>
         <input style={input} placeholder="e.g. SCHD" value={symbol} onChange={(e) => setSymbol(e.target.value)} />
@@ -175,6 +175,7 @@ export default function Portfolio() {
               <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, color: "var(--ink)" }}>Holdings</span>
               {!showAdd && <button onClick={() => setShowAdd(true)} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
             </div>
+            {showAdd && <div style={{ marginTop: 14 }}><AddForm onSave={addHolding} onCancel={() => setShowAdd(false)} /></div>}
             {holdings.map((h) => (
               <div key={h.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -195,7 +196,6 @@ export default function Portfolio() {
               </div>
             ))}
             {!holdings.length && !showAdd && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add what you own to track value, gains, and today's moves.</p>}
-            {showAdd && <AddForm onSave={addHolding} onCancel={() => setShowAdd(false)} />}
           </div>
         </>
       )}

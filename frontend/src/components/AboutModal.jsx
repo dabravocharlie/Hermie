@@ -1,6 +1,6 @@
 import Wings from "./Wings.jsx";
 
-export default function AboutModal({ open, onClose, onReplay }) {
+export default function AboutModal({ open, onClose, onReplay, isPaid }) {
   if (!open) return null;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const openDoc = (path) => window.open(`${origin}${path}`, "_blank");
@@ -22,6 +22,11 @@ export default function AboutModal({ open, onClose, onReplay }) {
           </div>
           <p style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--ink)" }}>Hermie</p>
           <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>Your money, made clear.</p>
+          {typeof isPaid === "boolean" && (
+            <span style={{ fontSize: 11, color: isPaid ? "var(--green)" : "var(--ink-soft)", border: `1px solid ${isPaid ? "var(--green-soft)" : "var(--divider)"}`, borderRadius: 99, padding: "2px 10px", marginTop: 2 }}>
+              Plan: {isPaid ? "Premium" : "Free"}
+            </span>
+          )}
         </div>
 
         <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.55, marginTop: 16, textAlign: "center" }}>

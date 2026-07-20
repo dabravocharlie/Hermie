@@ -28,6 +28,18 @@ export function dueLabel(days) {
   return `Due in ${days} days`;
 }
 
+// Attach next due date + days-until to each expense that has a due_day,
+// and return them sorted soonest-first.
+export function upcomingBills(expenses, from = new Date()) {
+  return expenses
+    .filter((e) => e.due_day)
+    .map((e) => {
+      const date = nextDueDate(e.due_day, from);
+      return { ...e, dueDate: date, days: daysUntil(date, from) };
+    })
+    .sort((a, b) => a.days - b.days);
+}
+
 // Parse a 'YYYY-MM-DD' (or ISO) string into a local Date at midnight,
 // avoiding the timezone off-by-one that comes from new Date("YYYY-MM-DD").
 export function parseDateLocal(s) {
@@ -82,13 +94,28 @@ export function upcomingPaydays(income, from = new Date()) {
     .sort((a, b) => a.days - b.days);
 }
 
-// and return them sorted soonest-first.
-export function upcomingBills(expenses, from = new Date()) {
-  return expenses
-    .filter((e) => e.due_day)
-    .map((e) => {
-      const date = nextDueDate(e.due_day, from);
-      return { ...e, dueDate: date, days: daysUntil(date, from) };
-    })
-    .sort((a, b) => a.days - b.days);
+// The most recent due date for a bill that is on or before `from` (i.e. the
+// start of the billing cycle we're currently in). Used to tell whether a
+// "paid" mark is still current or belongs to a past cycle. Bills without a
+// due_day have no cycle concept, so this returns null for those \u2014 the
+// paid checkbox then behaves as a simple manual toggle with no auto-reset.
+export function lastDueOnOrBefore(dueDay, from = new Date()) {
+  if (!dueDay) return null;
+  const today = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const next = nextDueDate(dueDay, today); // always >= today
+  if (next.getTime() === today.getTime()) return today;
+  const prevMonthAnchor = new Date(next.getFullYear(), next.getMonth() - 1, 1);
+  const lastDayPrev = new Date(prevMonthAnchor.getFullYear(), prevMonthAnchor.getMonth() + 1, 0).getDate();
+  const day = Math.min(dueDay, lastDayPrev);
+  return new Date(prevMonthAnchor.getFullYear(), prevMonthAnchor.getMonth(), day);
+}
+
+// Whether a bill's paid_at timestamp is still valid for the current cycle.
+// If there's no due_day (no cycle concept), any paid_at counts as paid.
+export function isPaidForCycle(expense, from = new Date()) {
+  if (!expense.paid_at) return false;
+  const paidAt = new Date(expense.paid_at);
+  if (!expense.due_day) return true;
+  const cycleStart = lastDueOnOrBefore(expense.due_day, from);
+  return cycleStart && paidAt >= cycleStart;
 }

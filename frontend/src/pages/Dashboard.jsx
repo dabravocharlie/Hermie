@@ -7,6 +7,86 @@ import { buildInsight } from "../lib/insight.js";
 
 const EVENT_EMOJI = { ipo: "\u{1F680}", bill: "\u{1F4B3}", appointment: "\u{1F4C5}", reminder: "\u{1F514}" };
 
+const inputStyle = {
+  width: "100%", height: 42, borderRadius: 10, border: "1px solid var(--divider)",
+  background: "var(--bg)", color: "var(--ink)", padding: "0 12px", fontSize: 16,
+};
+
+function BankBalanceCard() {
+  const api = useApi();
+  const [balance, setBalance] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const p = await api.get("/api/profile");
+        setBalance(p.bankBalance);
+        setUpdatedAt(p.bankBalanceUpdatedAt);
+      } catch {
+        /* leave blank; user can still set it */
+      } finally {
+        setLoaded(true);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function startEdit() {
+    setVal(balance != null ? String(balance) : "");
+    setEditing(true);
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const res = await api.put("/api/profile/bank-balance", { balance: val });
+      setBalance(res.bankBalance);
+      setUpdatedAt(res.bankBalanceUpdatedAt);
+      setEditing(false);
+    } catch {
+      /* keep the form open so they can retry */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const updatedLabel = updatedAt
+    ? new Date(updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : null;
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--card-bd)", borderRadius: 20, padding: 18, boxShadow: "0 0 20px var(--violet-glow)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Bank balance</p>
+        {!editing && <button onClick={startEdit} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 13, fontWeight: 500 }}>Edit</button>}
+      </div>
+
+      {!editing ? (
+        <>
+          <p className="mono" style={{ fontSize: 28, fontWeight: 500, color: "var(--ink)", margin: "6px 0 0" }}>
+            {!loaded ? "\u2014" : balance != null ? formatCurrency(balance, true) : "Not set"}
+          </p>
+          <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
+            {updatedLabel ? `Updated ${updatedLabel} \u00B7 entered manually` : "Tap Edit to enter what's actually in your account"}
+          </p>
+        </>
+      ) : (
+        <form onSubmit={save} style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <input autoFocus type="number" inputMode="decimal" step="0.01" style={inputStyle} placeholder="0.00" value={val} onChange={(e) => setVal(e.target.value)} />
+          <button type="button" onClick={() => setEditing(false)} style={{ height: 42, padding: "0 14px", borderRadius: 10, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 14 }}>Cancel</button>
+          <button type="submit" disabled={busy} style={{ height: 42, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--violet)", color: "#fff", fontSize: 14, fontWeight: 500 }}>{busy ? "..." : "Save"}</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const api = useApi();
   const [summary, setSummary] = useState(null);
@@ -65,9 +145,9 @@ export default function Dashboard() {
   const thisWeek = useMemo(() => upcoming.filter((b) => b.days >= 0 && b.days <= 7), [upcoming]);
   const weekSum = useMemo(() => thisWeek.reduce((s, b) => s + (Number(b.amount) || 0), 0), [thisWeek]);
 
-  // Combined agenda for "Coming up": bill due-dates + calendar events.
+  // Combined agenda for "Coming up": bill due-dates + calendar events + paydays.
   const coming = useMemo(() => {
-    const bills = upcoming.map((b) => ({
+    const billItems = upcoming.map((b) => ({
       key: `b${b.id}`, emoji: categoryMeta(b.category).emoji, title: b.name, days: b.days, sub: dueLabel(b.days), amount: b.amount,
     }));
     const evs = events
@@ -80,7 +160,7 @@ export default function Dashboard() {
     const pay = upcomingPaydays(income).map((p) => ({
       key: `p${p.id}`, emoji: "\u{1F4B5}", title: p.name, days: p.days, sub: whenLabel(p.days), amount: p.amount,
     }));
-    return [...bills, ...evs, ...pay].sort((a, b) => a.days - b.days);
+    return [...billItems, ...evs, ...pay].sort((a, b) => a.days - b.days);
   }, [upcoming, events, income]);
 
   const insight = buildInsight(summary || {});
@@ -101,6 +181,8 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: "4px 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <BankBalanceCard />
+
       {/* Hero */}
       <div style={{ background: "var(--card)", border: "1px solid var(--card-bd)", borderRadius: 20, padding: 20, boxShadow: "0 0 24px var(--violet-glow)" }}>
         <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Safe to spend this month</p>
@@ -123,6 +205,7 @@ export default function Dashboard() {
           <p className="mono" style={{ fontSize: 22, fontWeight: 500, margin: "6px 0 0", color: "var(--ink)" }}>{thisWeek.length}</p>
           <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>{formatCurrency(weekSum)} due</p>
         </div>
+
         {(() => {
           const up = pt ? pt.todayChange >= 0 : true;
           const col = pt && pt.todayChange < 0 ? "var(--amber)" : "var(--green)";

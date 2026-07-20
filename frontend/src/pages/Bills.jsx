@@ -9,7 +9,7 @@ import {
   categoryMeta,
   budgetFit,
 } from "../lib/money.js";
-import { nextPayday } from "../lib/dates.js";
+import { nextPayday, isPaidForCycle } from "../lib/dates.js";
 
 const input = {
   width: "100%", height: 44, borderRadius: 12, border: "1px solid var(--divider)",
@@ -20,6 +20,13 @@ const primaryBtn = { height: 44, borderRadius: 12, border: "none", background: "
 const ghostBtn = { height: 44, borderRadius: 12, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 15, flex: 1 };
 
 const CAT_KEYS = CATEGORIES.map((c) => c.key);
+
+function toInputDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 function SectionCard({ children }) {
   return (
@@ -49,7 +56,7 @@ function IncomeForm({ initial, onSave, onCancel }) {
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginTop: 14 }}>
+    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginBottom: 14 }}>
       <div>
         <label style={labelText}>Source</label>
         <input style={input} placeholder="e.g. Paycheck, Side gig" value={name} onChange={(e) => setName(e.target.value)} />
@@ -104,7 +111,7 @@ function ExpenseForm({ initial, onSave, onCancel }) {
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginTop: 14 }}>
+    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginBottom: 14 }}>
       <div>
         <label style={labelText}>Bill name</label>
         <input style={input} placeholder="e.g. Rent, Netflix, Car note" value={name} onChange={(e) => setName(e.target.value)} />
@@ -156,6 +163,7 @@ function WishForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || "");
   const [store, setStore] = useState(initial?.store || "");
   const [cost, setCost] = useState(initial ? String(initial.cost) : "");
+  const [link, setLink] = useState(initial?.link || "");
   const [busy, setBusy] = useState(false);
 
   async function submit(e) {
@@ -163,7 +171,7 @@ function WishForm({ initial, onSave, onCancel }) {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      await onSave({ name, store, cost });
+      await onSave({ name, store, cost, link });
       onCancel();
     } finally {
       setBusy(false);
@@ -171,7 +179,7 @@ function WishForm({ initial, onSave, onCancel }) {
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginTop: 14 }}>
+    <form onSubmit={submit} style={{ display: "grid", gap: 12, marginBottom: 14 }}>
       <div>
         <label style={labelText}>Item</label>
         <input style={input} placeholder="e.g. Noise-cancelling headphones" value={name} onChange={(e) => setName(e.target.value)} />
@@ -179,6 +187,10 @@ function WishForm({ initial, onSave, onCancel }) {
       <div>
         <label style={labelText}>Where to buy (optional)</label>
         <input style={input} placeholder="e.g. Best Buy, Amazon" value={store} onChange={(e) => setStore(e.target.value)} />
+      </div>
+      <div>
+        <label style={labelText}>Link to the item (optional)</label>
+        <input style={input} type="url" placeholder="https://..." value={link} onChange={(e) => setLink(e.target.value)} />
       </div>
       <div>
         <label style={labelText}>Cost</label>
@@ -208,8 +220,42 @@ function Row({ left, sub, amount, freq, onEdit, onDelete }) {
   );
 }
 
-function WishRow({ item, fit, onEdit, onDelete }) {
+function ExpenseRow({ exp, onEdit, onDelete, onTogglePaid }) {
+  const meta = categoryMeta(exp.category);
+  const paid = isPaidForCycle(exp);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid var(--divider)", opacity: paid ? 0.55 : 1 }}>
+      <button
+        onClick={() => onTogglePaid(exp)}
+        aria-label={paid ? "Mark unpaid" : "Mark paid"}
+        style={{
+          width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          border: `1.5px solid ${paid ? "var(--green)" : "var(--divider)"}`, background: paid ? "var(--green)" : "transparent", color: "#fff", fontSize: 14,
+        }}
+      >
+        {paid ? "\u2713" : ""}
+      </button>
+      <button onClick={onEdit} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
+        <p style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: paid ? "line-through" : "none" }}>{meta.emoji}  {exp.name}</p>
+        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 1 }}>{meta.label}{exp.due_day ? ` \u00B7 due the ${exp.due_day}` : ""}{exp.autopay ? " \u00B7 autopay" : ""}</p>
+      </button>
+      <button onClick={onEdit} style={{ textAlign: "right", background: "transparent", border: "none", cursor: "pointer" }}>
+        <p className="mono" style={{ fontSize: 15, color: "var(--ink)" }}>{formatCurrency(exp.amount, true)}</p>
+        <p style={{ fontSize: 11, color: "var(--ink-soft)" }}>{freqShort(exp.frequency)}</p>
+      </button>
+      <button onClick={onDelete} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 20, padding: "0 2px", lineHeight: 1 }}>{"\u00D7"}</button>
+    </div>
+  );
+}
+
+function WishRow({ item, fit, onEdit, onDelete, onAddToCalendar }) {
+  const [calOpen, setCalOpen] = useState(false);
+  const [calDate, setCalDate] = useState(() => {
+    const d = fit.targetDate ? fit.targetDate : (() => { const dd = new Date(); dd.setDate(dd.getDate() + 7); return dd; })();
+    return toInputDateStr(d);
+  });
   const dotColor = fit.status === "fits" ? "var(--green)" : fit.status === "save" ? "var(--violet)" : "var(--amber)";
+
   return (
     <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -222,11 +268,39 @@ function WishRow({ item, fit, onEdit, onDelete }) {
         </button>
         <button onClick={onDelete} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 20, padding: "0 2px", lineHeight: 1 }}>{"\u00D7"}</button>
       </div>
+
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, paddingLeft: 2 }}>
         <span style={{ width: 7, height: 7, borderRadius: 99, background: dotColor, flexShrink: 0 }} />
         <p style={{ fontSize: 12, color: dotColor, fontWeight: 500 }}>{fit.label}</p>
       </div>
       <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 2, paddingLeft: 13 }}>{fit.detail}</p>
+
+      <div style={{ display: "flex", gap: 14, marginTop: 8, paddingLeft: 13, alignItems: "center", flexWrap: "wrap" }}>
+        {item.link && (
+          <a href={item.link} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--violet)", fontWeight: 500, textDecoration: "none" }}>
+            View item {"\u2197"}
+          </a>
+        )}
+        {item.added_to_calendar ? (
+          <span style={{ fontSize: 12, color: "var(--green)" }}>{"\u2713"} On calendar</span>
+        ) : (
+          <button onClick={() => setCalOpen((v) => !v)} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 12, fontWeight: 500, padding: 0 }}>
+            + Add to calendar
+          </button>
+        )}
+      </div>
+
+      {calOpen && !item.added_to_calendar && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8, paddingLeft: 13, alignItems: "center" }}>
+          <input type="date" value={calDate} onChange={(e) => setCalDate(e.target.value)} style={{ ...input, height: 38, flex: 1 }} />
+          <button
+            onClick={() => { onAddToCalendar(item, calDate); setCalOpen(false); }}
+            style={{ height: 38, padding: "0 14px", borderRadius: 10, border: "none", background: "var(--violet)", color: "#fff", fontSize: 13, fontWeight: 500 }}
+          >
+            Save
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -272,6 +346,14 @@ export default function Bills() {
   const monthlyExpenses = useMemo(() => expenses.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0), [expenses]);
   const safe = monthlyIncome - monthlyExpenses;
 
+  const sortedExpenses = useMemo(() => {
+    return [...expenses].sort((a, b) => {
+      const ap = isPaidForCycle(a) ? 1 : 0;
+      const bp = isPaidForCycle(b) ? 1 : 0;
+      return ap - bp;
+    });
+  }, [expenses]);
+
   async function saveIncome(data) {
     if (incForm?.mode === "edit") await api.put(`/api/income/${incForm.item.id}`, data);
     else await api.post("/api/income", data);
@@ -290,6 +372,12 @@ export default function Bills() {
     await api.del(`/api/expenses/${id}`);
     setExpenses((p) => p.filter((r) => r.id !== id));
   }
+  async function toggleExpensePaid(exp) {
+    const paid = isPaidForCycle(exp);
+    if (paid) await api.post(`/api/expenses/${exp.id}/unpaid`, {});
+    else await api.post(`/api/expenses/${exp.id}/paid`, {});
+    await load();
+  }
   async function saveWish(data) {
     if (wishForm?.mode === "edit") await api.put(`/api/wishlist/${wishForm.item.id}`, data);
     else await api.post("/api/wishlist", data);
@@ -298,6 +386,17 @@ export default function Bills() {
   async function delWish(id) {
     await api.del(`/api/wishlist/${id}`);
     setWishlist((p) => p.filter((r) => r.id !== id));
+  }
+  async function addWishToCalendar(item, dateStr) {
+    const notesParts = [item.store, item.link].filter(Boolean);
+    await api.post("/api/events", {
+      title: `Buy: ${item.name}`,
+      type: "reminder",
+      event_date: dateStr,
+      notes: notesParts.length ? notesParts.join(" \u2014 ") : null,
+    });
+    await api.post(`/api/wishlist/${item.id}/calendar-added`, {});
+    await load();
   }
 
   const seg = (id, text) => (
@@ -345,16 +444,16 @@ export default function Bills() {
 
           {/* Income */}
           <SectionCard>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: incForm ? 0 : 4 }}>
               <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, color: "var(--ink)" }}>Income</span>
               {!incForm && <button onClick={() => setIncForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
             </div>
+            {incForm && <div style={{ marginTop: 14 }}><IncomeForm initial={incForm.mode === "edit" ? incForm.item : null} onSave={saveIncome} onCancel={() => setIncForm(null)} /></div>}
             {income.map((r) => (
               <Row key={r.id} left={r.name} sub={payText(r)} amount={r.amount} freq={r.frequency}
                 onEdit={() => setIncForm({ mode: "edit", item: r })} onDelete={() => delIncome(r.id)} />
             ))}
             {!income.length && !incForm && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add your paychecks so Hermie knows what's coming in.</p>}
-            {incForm && <IncomeForm initial={incForm.mode === "edit" ? incForm.item : null} onSave={saveIncome} onCancel={() => setIncForm(null)} />}
           </SectionCard>
 
           {/* Expenses */}
@@ -363,21 +462,17 @@ export default function Bills() {
               <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, color: "var(--ink)" }}>Bills & expenses</span>
               {!expForm && <button onClick={() => setExpForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
             </div>
-            {expenses.map((r) => {
-              const meta = categoryMeta(r.category);
-              return (
-                <Row key={r.id} left={`${meta.emoji}  ${r.name}`}
-                  sub={meta.label + (r.due_day ? ` \u00B7 due the ${r.due_day}` : "") + (r.autopay ? " \u00B7 autopay" : "")}
-                  amount={r.amount} freq={r.frequency}
-                  onEdit={() => setExpForm({ mode: "edit", item: r })} onDelete={() => delExpense(r.id)} />
-              );
-            })}
+            {expForm && <div style={{ marginTop: 14 }}><ExpenseForm initial={expForm.mode === "edit" ? expForm.item : null} onSave={saveExpense} onCancel={() => setExpForm(null)} /></div>}
+            {sortedExpenses.map((r) => (
+              <ExpenseRow key={r.id} exp={r}
+                onEdit={() => setExpForm({ mode: "edit", item: r })} onDelete={() => delExpense(r.id)}
+                onTogglePaid={toggleExpensePaid} />
+            ))}
             {!expenses.length && !expForm && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add rent, car, utilities, subscriptions \u2014 anything that goes out.</p>}
-            {expForm && <ExpenseForm initial={expForm.mode === "edit" ? expForm.item : null} onSave={saveExpense} onCancel={() => setExpForm(null)} />}
           </SectionCard>
 
           <p style={{ fontSize: 11, color: "var(--ink-soft)", textAlign: "center", padding: "4px 20px" }}>
-            Tap any row to edit it. Educational, not financial advice.
+            Tap a row to edit it, or the checkbox to mark it paid. Educational, not financial advice.
           </p>
         </>
       )}
@@ -389,12 +484,13 @@ export default function Bills() {
             {!wishForm && <button onClick={() => setWishForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
           </div>
           <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>Things you want to buy. Hermie shows how each fits your budget.</p>
+          {wishForm && <div style={{ marginTop: 4 }}><WishForm initial={wishForm.mode === "edit" ? wishForm.item : null} onSave={saveWish} onCancel={() => setWishForm(null)} /></div>}
           {wishlist.map((w) => (
             <WishRow key={w.id} item={w} fit={budgetFit(w.cost, safe)}
-              onEdit={() => setWishForm({ mode: "edit", item: w })} onDelete={() => delWish(w.id)} />
+              onEdit={() => setWishForm({ mode: "edit", item: w })} onDelete={() => delWish(w.id)}
+              onAddToCalendar={addWishToCalendar} />
           ))}
           {!wishlist.length && !wishForm && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add something you're saving up for, and see when it fits your budget.</p>}
-          {wishForm && <WishForm initial={wishForm.mode === "edit" ? wishForm.item : null} onSave={saveWish} onCancel={() => setWishForm(null)} />}
           <p style={{ fontSize: 11, color: "var(--ink-soft)", textAlign: "center", marginTop: 14 }}>
             Based on your current budget, not a recommendation to spend. Educational, not financial advice.
           </p>

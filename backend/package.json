@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "db:init": "node db/init.js"
+    "db:init": "node db/init.js",
+    "list-users": "node db/list-users.js",
+    "set-paid": "node db/set-paid.js"
   },
   "engines": {
     "node": ">=18"

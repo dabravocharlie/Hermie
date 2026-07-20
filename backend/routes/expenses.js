@@ -54,6 +54,28 @@ router.put("/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
+// Mark a bill paid (for the current cycle). Frontend decides when a bill's
+// paid state should be treated as stale for a new cycle \u2014 see
+// lib/dates.js lastDueOnOrBefore() \u2014 this endpoint just records the timestamp.
+router.post("/:id/paid", async (req, res) => {
+  const { rows } = await pool.query(
+    "UPDATE expenses SET paid_at = now() WHERE id = $1 AND user_id = $2 RETURNING *",
+    [req.params.id, req.userId]
+  );
+  if (!rows.length) return res.status(404).json({ error: "Not found" });
+  res.json(rows[0]);
+});
+
+// Undo: mark a bill unpaid.
+router.post("/:id/unpaid", async (req, res) => {
+  const { rows } = await pool.query(
+    "UPDATE expenses SET paid_at = NULL WHERE id = $1 AND user_id = $2 RETURNING *",
+    [req.params.id, req.userId]
+  );
+  if (!rows.length) return res.status(404).json({ error: "Not found" });
+  res.json(rows[0]);
+});
+
 // Delete an expense.
 router.delete("/:id", async (req, res) => {
   const { rowCount } = await pool.query(

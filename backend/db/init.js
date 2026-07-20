@@ -20,6 +20,16 @@ const statements = [
   // Whether the user has seen the welcome tutorial (follows them across devices).
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_seen BOOLEAN NOT NULL DEFAULT false`,
 
+  // Internal paid-tier flag. No billing system yet \u2014 set manually for now
+  // via "npm run set-paid" (see db/set-paid.js). Real billing wires into this
+  // same column later.
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`,
+
+  // Manually-entered bank balance (free-tier). Paid tier will eventually
+  // offer a real bank connection as its own separate feature.
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_balance NUMERIC(12,2)`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_balance_updated_at TIMESTAMPTZ`,
+
   // Income: how much, how often, when next paid.
   `CREATE TABLE IF NOT EXISTS income_sources (
     id           SERIAL PRIMARY KEY,
@@ -43,6 +53,11 @@ const statements = [
     autopay      BOOLEAN NOT NULL DEFAULT false,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
+
+  // When the bill was last marked paid. Compared against the current billing
+  // cycle (derived from due_day) to auto-reset each cycle \u2014 see
+  // frontend lib/dates.js lastDueOnOrBefore().
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`,
 
   // Portfolio holdings (things the user owns).
   `CREATE TABLE IF NOT EXISTS holdings (
@@ -93,6 +108,10 @@ const statements = [
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
 
+  // Link to the item's page, and whether it's already been added to the Calendar.
+  `ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS link TEXT`,
+  `ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS added_to_calendar BOOLEAN NOT NULL DEFAULT false`,
+
   // Hermie conversation memory (per user). role = 'user' | 'assistant'.
   `CREATE TABLE IF NOT EXISTS hermie_messages (
     id           SERIAL PRIMARY KEY,
@@ -109,7 +128,7 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS idx_watchlist_user   ON watchlist(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_notes_user       ON research_notes(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_events_user      ON calendar_events(user_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_wishlist_user     ON wishlist_items(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_wishlist_user    ON wishlist_items(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_messages_user    ON hermie_messages(user_id, created_at)`,
 ];
 

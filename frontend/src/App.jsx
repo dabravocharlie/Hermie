@@ -103,14 +103,17 @@ function MainApp({ theme, onToggle }) {
   const [hermieOpen, setHermieOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [isPaid, setIsPaid] = useState(null);
   const Page = PAGES[tab];
 
   // First-login check: show the tutorial if this account hasn't seen it.
+  // Also picks up the paid-tier flag for the About panel's plan indicator.
   useEffect(() => {
     (async () => {
       try {
         const p = await api.get("/api/profile");
         if (p && !p.tutorialSeen) setShowTutorial(true);
+        if (p) setIsPaid(Boolean(p.isPaid));
       } catch {
         /* on error, don't interrupt the user; they'll see it next load */
       }
@@ -170,7 +173,7 @@ function MainApp({ theme, onToggle }) {
 
       <HermieButton onClick={() => setHermieOpen(true)} />
       <HermiePanel open={hermieOpen} onClose={() => setHermieOpen(false)} />
-      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} onReplay={replayTutorial} />
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} onReplay={replayTutorial} isPaid={isPaid} />
       <WelcomeCarousel open={showTutorial} onFinish={finishTutorial} />
       <TabBar active={tab} onChange={setTab} />
     </div>

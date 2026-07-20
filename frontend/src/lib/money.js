@@ -45,18 +45,30 @@ export const CATEGORIES = [
   { key: "other", label: "Other", emoji: "\u2022" },
 ];
 
+export function categoryMeta(key) {
+  return (
+    CATEGORIES.find((c) => c.key === key) || {
+      key,
+      label: key ? key.charAt(0).toUpperCase() + key.slice(1) : "Other",
+      emoji: "\u2022",
+    }
+  );
+}
+
 // Given an item's cost and the user's current monthly leftover (safeToSpend),
 // describe when it fits their budget. Deliberately factual/descriptive, never
 // directive ("you should buy this") \u2014 states what the numbers show.
+// Includes a raw targetDate (Date | null) so callers can prefill a calendar
+// reminder without re-deriving the math.
 export function budgetFit(cost, monthlyLeft) {
   const c = Number(cost) || 0;
   const left = Number(monthlyLeft) || 0;
 
   if (left <= 0) {
-    return { status: "tight", label: "Budget is tight right now", detail: "No monthly leftover currently \u2014 review bills or income first." };
+    return { status: "tight", label: "Budget is tight right now", detail: "No monthly leftover currently \u2014 review bills or income first.", targetDate: null };
   }
   if (c <= left) {
-    return { status: "fits", label: "Fits in this month's budget", detail: `You have about ${formatCurrency(left)} left over this month.` };
+    return { status: "fits", label: "Fits in this month's budget", detail: `You have about ${formatCurrency(left)} left over this month.`, targetDate: null };
   }
   const months = Math.ceil(c / left);
   const target = new Date();
@@ -66,15 +78,6 @@ export function budgetFit(cost, monthlyLeft) {
     status: "save",
     label: `About ${months} month${months === 1 ? "" : "s"} to save`,
     detail: `At your current pace (${formatCurrency(left)}/mo left over), you'd have this by around ${targetLabel}.`,
+    targetDate: target,
   };
-}
-
-export function categoryMeta(key) {
-  return (
-    CATEGORIES.find((c) => c.key === key) || {
-      key,
-      label: key ? key.charAt(0).toUpperCase() + key.slice(1) : "Other",
-      emoji: "\u2022",
-    }
-  );
 }

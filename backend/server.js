@@ -54,25 +54,19 @@ app.get("/api/health", async (_req, res) => {
 });
 
 // --- Protected routes ---------------------------------------------------
-// Confirms auth is wired correctly end to end. Phase 2+ routes mount here.
 app.get("/api/me", requireUser, (req, res) => {
   res.json({ userId: req.userId });
 });
 
-// Phase 2 — Bills & Income. Every route requires a signed-in user and is
-// scoped to that user inside the route handlers.
 app.use("/api/income", requireUser, incomeRouter);
 app.use("/api/expenses", requireUser, expensesRouter);
 app.use("/api/summary", requireUser, summaryRouter);
 
-// Phase 4 — Portfolio. Holdings CRUD + live-price enrichment + news.
 app.use("/api/holdings", requireUser, holdingsRouter);
 app.use("/api/portfolio", requireUser, portfolioRouter);
 
-// Phase 5 — Calendar. Reminders for IPOs, bills, and appointments.
 app.use("/api/events", requireUser, eventsRouter);
 
-// Phase 6 — Research/Watchlist + the full Hermie assistant.
 app.use("/api/research", requireUser, researchRouter);
 app.use("/api/hermie", requireUser, hermieRouter);
 app.use("/api/profile", requireUser, profileRouter);

@@ -7,10 +7,10 @@ const router = express.Router();
 
 const SYSTEM = `You are Hermie, a warm, plain-spoken personal-finance assistant living inside a consumer app. Your job is to help everyday people UNDERSTAND their money: their cash flow, bills, and investments.
 
-You are an EDUCATIONAL guide, NOT a financial advisor. This is the most important rule and you never break it:
+You are an EDUCATIONAL guide, NOT a financial advisor. This is the most important rule and you never break it, regardless of the user's tier:
 - Never tell the user what specific investments to buy, sell, or hold. No personalized investment recommendations, no "you should put money into X", no specific allocations presented as what to do.
 - You MAY: explain concepts, define terms, describe how things generally work, walk through the user's own numbers factually (e.g. "your bills are about 45% of your income"), summarize news, and explain the pros and cons people generally weigh.
-- If asked what to buy/sell or what they "should" do with their money, gently decline, say you're an educational guide rather than a financial advisor, then offer to explain the relevant ideas or show them their numbers, and suggest a licensed financial advisor for personal decisions.
+- If asked what to buy/sell or what they "should" do with their investments, gently decline, say you're an educational guide rather than a financial advisor, then offer to explain the relevant ideas or show them their numbers, and suggest a licensed financial advisor for personal investment decisions.
 - Never promise or predict returns. Never guarantee outcomes.
 
 Style: warm, concise, encouraging, jargon-free (or explain the jargon). Short paragraphs. Talk like a knowledgeable friend, not a textbook.
@@ -23,9 +23,12 @@ You have tools to help the user stay organized. Use them when they ask you to re
 - add_event: add a calendar reminder (IPO date, bill, appointment).
 - add_to_wishlist: add an item they want to purchase (not a stock) to their purchase wishlist.
 
-The user's snapshot below includes a "Purchase wishlist" if they have one, with a budget-fit note per item (whether it fits their current monthly leftover or roughly how long it'd take to save for). If asked about timing a purchase, describe what the numbers show factually (e.g. "at your current pace you'd have this saved in about 2 months") rather than issuing a directive like "you should buy it now." This is budget math on their own numbers, not investment advice, but keep the same non-directive tone.
+The user's snapshot below may include a bank balance and a "Purchase wishlist" with a budget-fit note per item (whether it fits their current monthly leftover or roughly how long it'd take to save for). If asked about timing a purchase, describe what the numbers show factually (e.g. "at your current pace you'd have this saved in about 2 months") rather than issuing a directive like "you should buy it now." This is budget math on their own numbers, not investment advice, but keep the same non-directive tone unless the user has premium access (see below).`;
 
-You are given the user's current financial snapshot below. Use it to ground your answers, but never repeat it back wholesale unless relevant.`;
+const PREMIUM_ADDENDUM = `
+
+--- Premium mode ---
+This user has premium access. In addition to your usual role, you may give more direct and concrete BUDGETING, SAVINGS, and PURCHASE guidance grounded in their real numbers above \u2014 for example, specific suggestions like "you could trim about $60/month by cutting one streaming subscription" or "waiting about 3 weeks would let you buy this without dipping into next month's rent money." This is coaching on their own cash flow and spending choices, NOT investment or securities advice \u2014 the investing rules above still fully apply without exception. Present suggestions as options they can choose from, not commands. Stay warm and non-judgmental about their spending; you're a coach, not a critic.`;
 
 const TOOLS = [
   { type: "web_search_20250305", name: "web_search" },
@@ -73,15 +76,17 @@ const TOOLS = [
         name: { type: "string", description: "The item name." },
         store: { type: "string", description: "Optional store or place to buy it." },
         cost: { type: "number", description: "Price of the item." },
+        link: { type: "string", description: "Optional URL to the item's page." },
       },
       required: ["name", "cost"],
     },
   },
 ];
 
-// Build a compact snapshot of the user's finances for grounding.
+// Build a compact snapshot of the user's finances for grounding, plus
+// whether they're on the paid tier (shapes the system prompt).
 async function buildContext(userId) {
-  const [inc, exp, hold, watch, events, notes, wish] = await Promise.all([
+  const [inc, exp, hold, watch, events, notes, wish, acct] = await Promise.all([
     pool.query("SELECT name, amount, frequency FROM income_sources WHERE user_id = $1", [userId]),
     pool.query("SELECT name, category, amount, frequency, due_day FROM expenses WHERE user_id = $1", [userId]),
     pool.query("SELECT symbol, shares, cost_basis FROM holdings WHERE user_id = $1", [userId]),
@@ -89,15 +94,22 @@ async function buildContext(userId) {
     pool.query("SELECT title, type, event_date FROM calendar_events WHERE user_id = $1 ORDER BY event_date ASC LIMIT 8", [userId]),
     pool.query("SELECT author, symbol, body FROM research_notes WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6", [userId]),
     pool.query("SELECT name, store, cost FROM wishlist_items WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10", [userId]),
+    pool.query("SELECT is_paid, bank_balance FROM users WHERE user_id = $1", [userId]),
   ]);
 
   const monthlyIncome = inc.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
   const monthlyExpenses = exp.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
+  const monthlyLeft = monthlyIncome - monthlyExpenses;
+  const isPaid = acct.rows[0]?.is_paid || false;
+  const bankBalance = acct.rows[0]?.bank_balance;
 
   const lines = [];
   lines.push(`Monthly income: $${monthlyIncome.toFixed(0)}`);
   lines.push(`Monthly bills: $${monthlyExpenses.toFixed(0)}`);
-  lines.push(`Left over per month: $${(monthlyIncome - monthlyExpenses).toFixed(0)}`);
+  lines.push(`Left over per month: $${monthlyLeft.toFixed(0)}`);
+  if (bankBalance !== null && bankBalance !== undefined) {
+    lines.push(`Bank balance (self-reported): $${Number(bankBalance).toFixed(0)}`);
+  }
   if (exp.rows.length) {
     lines.push("Bills: " + exp.rows.map((e) => `${e.name} ($${Number(e.amount).toFixed(0)} ${e.frequency}, ${e.category})`).join("; "));
   }
@@ -108,7 +120,6 @@ async function buildContext(userId) {
   if (events.rows.length) lines.push("Upcoming: " + events.rows.map((e) => `${e.title} (${e.type}, ${String(e.event_date).slice(0, 10)})`).join("; "));
   if (notes.rows.length) lines.push("Recent notes: " + notes.rows.map((n) => `[${n.author}] ${n.body}`).join(" | "));
   if (wish.rows.length) {
-    const monthlyLeft = monthlyIncome - monthlyExpenses;
     lines.push("Purchase wishlist: " + wish.rows.map((w) => {
       const cost = Number(w.cost) || 0;
       const fit = monthlyLeft <= 0 ? "budget is tight right now" : cost <= monthlyLeft ? "fits in this month's leftover budget" : `about ${Math.ceil(cost / monthlyLeft)} months to save at current pace`;
@@ -116,7 +127,7 @@ async function buildContext(userId) {
     }).join("; "));
   }
 
-  return lines.join("\n");
+  return { text: lines.join("\n"), isPaid };
 }
 
 // Execute Hermie's action tools against the user's own data.
@@ -151,8 +162,8 @@ async function runTool(name, input, userId) {
       const itemName = String(input.name || "").trim();
       if (!itemName) return "No item name given.";
       await pool.query(
-        `INSERT INTO wishlist_items (user_id, name, store, cost) VALUES ($1, $2, $3, $4)`,
-        [userId, itemName, input.store ? String(input.store).trim() : null, Number(input.cost) || 0]
+        `INSERT INTO wishlist_items (user_id, name, store, cost, link) VALUES ($1, $2, $3, $4, $5)`,
+        [userId, itemName, input.store ? String(input.store).trim() : null, Number(input.cost) || 0, input.link ? String(input.link).trim() : null]
       );
       return `Added "${itemName}" to the wishlist.`;
     }
@@ -187,8 +198,8 @@ router.post("/chat", async (req, res) => {
     );
     const history = hist.rows.reverse().map((m) => ({ role: m.role, content: m.content }));
 
-    const context = await buildContext(req.userId);
-    const system = `${SYSTEM}\n\n--- User's current financial snapshot ---\n${context}`;
+    const { text: context, isPaid } = await buildContext(req.userId);
+    const system = `${SYSTEM}${isPaid ? PREMIUM_ADDENDUM : ""}\n\n--- User's current financial snapshot ---\n${context}`;
 
     let messages = [...history, { role: "user", content: userMessage }];
     let finalText = "";
