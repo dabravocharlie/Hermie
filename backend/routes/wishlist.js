@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT * FROM wishlist_items WHERE user_id = $1 ORDER BY created_at DESC",
+    "SELECT * FROM wishlist_items WHERE user_id = $1 AND bought = false ORDER BY created_at DESC",
     [req.userId]
   );
   res.json(rows);

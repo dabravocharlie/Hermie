@@ -25,6 +25,12 @@ const statements = [
   // same column later.
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`,
 
+  // A minimum balance the user wants to keep across their bank accounts
+  // (a "don't touch this" buffer). Factored into wishlist purchase-timing
+  // math everywhere \u2014 the app and Hermie both read this same value, so
+  // it's a standing rule rather than something that can be forgotten.
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS reserve_amount NUMERIC(12,2) NOT NULL DEFAULT 0`,
+
   // Manually-entered bank balance (legacy single-value field, kept for the
   // one-time migration into bank_accounts below). No longer written to by
   // the app; superseded by the bank_accounts table.
@@ -124,6 +130,11 @@ const statements = [
   // Link to the item's page, and whether it's already been added to the Calendar.
   `ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS link TEXT`,
   `ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS added_to_calendar BOOLEAN NOT NULL DEFAULT false`,
+
+  // Whether the item has been bought \u2014 retires it from the active wishlist
+  // (and its budget-fit math) without deleting the record.
+  `ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS bought BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS bought_at TIMESTAMPTZ`,
 
   // Hermie conversation memory (per user). role = 'user' | 'assistant'.
   `CREATE TABLE IF NOT EXISTS hermie_messages (

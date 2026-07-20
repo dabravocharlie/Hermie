@@ -17,13 +17,19 @@ Style: warm, concise, encouraging, jargon-free (or explain the jargon). Short pa
 
 You can search the web for current, factual information (prices, news, definitions, what an IPO is, how index funds work, etc.).
 
-You have tools to help the user stay organized. Use them when they ask you to remember something, watch a stock, or set a reminder, and briefly confirm what you did:
+You have tools to help the user stay organized. Use them when they ask you to remember something, watch a stock, set a reminder, log a bill, or manage their wishlist, and briefly confirm what you did:
 - save_note: save a note to their Research tab (great for observations or things to revisit).
 - add_to_watchlist: add a ticker to their watchlist.
 - add_event: add a calendar reminder (IPO date, bill, appointment).
 - add_to_wishlist: add an item they want to purchase (not a stock) to their purchase wishlist.
+- add_expense: add a new recurring bill (housing, transport, utilities, subscriptions, insurance, debt, food, or a short custom category).
+- mark_bill_paid: mark an existing bill paid for the current cycle, matched by name (e.g. "I just paid rent").
+- edit_wishlist_item, delete_wishlist_item, mark_wishlist_bought: manage an existing wishlist item, matched by name.
+- set_reserve: update the minimum balance the user wants to always keep untouched (e.g. "keep at least $500 in my account").
 
-The user's snapshot below may include one or more named bank accounts and a "Purchase wishlist" with a budget-fit note per item (whether it's already covered by their current bank balance, or roughly how long it'd take to save the remaining amount). If asked about timing a purchase, describe what the numbers show factually (e.g. "you've already got that covered" or "at your current pace you'd have the rest saved in about 2 months") rather than issuing a directive like "you should buy it now." This is budget math on their own numbers, not investment advice, but keep the same non-directive tone unless the user has premium access (see below).`;
+Tools that match an existing bill or wishlist item by name (mark_bill_paid, edit_wishlist_item, delete_wishlist_item, mark_wishlist_bought) will tell you if the name is ambiguous or not found \u2014 relay that back to the user and ask them to clarify rather than guessing which one they meant.
+
+The user's snapshot below may include one or more named bank accounts, a reserve amount they want to keep untouched, and a "Purchase wishlist" with a budget-fit note per item. That note already accounts for the reserve: an item can be "already covered," "would dip into the reserve" (they technically have the money, but spending it would drop them below the line they've asked to protect), or "needs more time to save." When an item would dip into the reserve, recommend waiting until the date given rather than suggesting they buy it now \u2014 that's the whole point of the reserve. Describe all of this factually (e.g. "that would dip into your reserve; waiting until around March would cover it without touching that buffer") rather than as a directive, and never override or second-guess the reserve the user has set.`;
 
 const PREMIUM_ADDENDUM = `
 
@@ -81,6 +87,73 @@ const TOOLS = [
       required: ["name", "cost"],
     },
   },
+  {
+    name: "add_expense",
+    description: "Add a new recurring bill or expense.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The bill's name." },
+        category: { type: "string", description: "One of: housing, transport, utilities, subscriptions, insurance, debt, food, other (or a short custom category)." },
+        amount: { type: "number" },
+        frequency: { type: "string", description: "One of: weekly, biweekly, monthly, once." },
+        due_day: { type: "integer", description: "Optional day of month (1-31) it's due." },
+        autopay: { type: "boolean", description: "Optional, whether it's on autopay." },
+      },
+      required: ["name", "amount"],
+    },
+  },
+  {
+    name: "mark_bill_paid",
+    description: "Mark an existing bill as paid for the current cycle, matched by name.",
+    input_schema: {
+      type: "object",
+      properties: { bill_name: { type: "string", description: "The bill's name, or a close match (e.g. 'electric')." } },
+      required: ["bill_name"],
+    },
+  },
+  {
+    name: "edit_wishlist_item",
+    description: "Edit an existing wishlist item's name, store, cost, or link, matched by its current name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "The current name of the item to edit." },
+        new_name: { type: "string" },
+        new_store: { type: "string" },
+        new_cost: { type: "number" },
+        new_link: { type: "string" },
+      },
+      required: ["item_name"],
+    },
+  },
+  {
+    name: "delete_wishlist_item",
+    description: "Remove an item from the wishlist entirely, matched by name.",
+    input_schema: {
+      type: "object",
+      properties: { item_name: { type: "string" } },
+      required: ["item_name"],
+    },
+  },
+  {
+    name: "mark_wishlist_bought",
+    description: "Mark a wishlist item as bought, removing it from the active wishlist without deleting its record.",
+    input_schema: {
+      type: "object",
+      properties: { item_name: { type: "string" } },
+      required: ["item_name"],
+    },
+  },
+  {
+    name: "set_reserve",
+    description: "Set the minimum balance the user wants to always keep untouched across their bank accounts. Wishlist purchase timing will factor this in automatically.",
+    input_schema: {
+      type: "object",
+      properties: { amount: { type: "number", description: "The reserve amount, e.g. 500." } },
+      required: ["amount"],
+    },
+  },
 ];
 
 // Build a compact snapshot of the user's finances for grounding, plus
@@ -93,8 +166,8 @@ async function buildContext(userId) {
     pool.query("SELECT symbol FROM watchlist WHERE user_id = $1", [userId]),
     pool.query("SELECT title, type, event_date FROM calendar_events WHERE user_id = $1 ORDER BY event_date ASC LIMIT 8", [userId]),
     pool.query("SELECT author, symbol, body FROM research_notes WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6", [userId]),
-    pool.query("SELECT name, store, cost FROM wishlist_items WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10", [userId]),
-    pool.query("SELECT is_paid FROM users WHERE user_id = $1", [userId]),
+    pool.query("SELECT name, store, cost FROM wishlist_items WHERE user_id = $1 AND bought = false ORDER BY created_at DESC LIMIT 10", [userId]),
+    pool.query("SELECT is_paid, reserve_amount FROM users WHERE user_id = $1", [userId]),
     pool.query("SELECT name, balance FROM bank_accounts WHERE user_id = $1 ORDER BY created_at ASC", [userId]),
   ]);
 
@@ -102,7 +175,9 @@ async function buildContext(userId) {
   const monthlyExpenses = exp.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
   const monthlyLeft = monthlyIncome - monthlyExpenses;
   const isPaid = acct.rows[0]?.is_paid || false;
+  const reserve = Number(acct.rows[0]?.reserve_amount) || 0;
   const bankTotal = banks.rows.reduce((s, b) => s + Number(b.balance), 0);
+  const available = Math.max(0, bankTotal - reserve);
 
   const lines = [];
   lines.push(`Monthly income: $${monthlyIncome.toFixed(0)}`);
@@ -110,6 +185,9 @@ async function buildContext(userId) {
   lines.push(`Left over per month: $${monthlyLeft.toFixed(0)}`);
   if (banks.rows.length) {
     lines.push("Bank accounts (self-reported): " + banks.rows.map((b) => `${b.name} $${Number(b.balance).toFixed(0)}`).join(", ") + ` \u2014 total $${bankTotal.toFixed(0)}`);
+  }
+  if (reserve > 0) {
+    lines.push(`Reserve the user wants to keep untouched: $${reserve.toFixed(0)} (leaves $${available.toFixed(0)} truly available)`);
   }
   if (exp.rows.length) {
     lines.push("Bills: " + exp.rows.map((e) => `${e.name} ($${Number(e.amount).toFixed(0)} ${e.frequency}, ${e.category})`).join("; "));
@@ -123,20 +201,49 @@ async function buildContext(userId) {
   if (wish.rows.length) {
     lines.push("Purchase wishlist: " + wish.rows.map((w) => {
       const cost = Number(w.cost) || 0;
-      const remaining = cost - bankTotal;
+      const remaining = cost - available;
       let fit;
       if (remaining <= 0) {
-        fit = "already covered by current bank balance";
-      } else if (monthlyLeft <= 0) {
-        fit = "budget is tight right now, no monthly leftover to add toward it";
+        fit = reserve > 0 ? "fits without touching the reserve" : "already covered by current bank balance";
       } else {
-        fit = `about ${Math.ceil(remaining / monthlyLeft)} months to save the remaining $${remaining.toFixed(0)} at current pace`;
+        const dippingIntoReserve = reserve > 0 && cost <= bankTotal;
+        if (monthlyLeft <= 0) {
+          fit = dippingIntoReserve
+            ? "would dip into the reserve; no monthly leftover right now to close the gap"
+            : "budget is tight right now, no monthly leftover to add toward it";
+        } else {
+          const months = Math.ceil(remaining / monthlyLeft);
+          fit = dippingIntoReserve
+            ? `would dip into the reserve if bought now; about ${months} months until it's covered without touching it`
+            : `about ${months} months to save the remaining $${remaining.toFixed(0)} at current pace`;
+        }
       }
       return `${w.name}${w.store ? ` (${w.store})` : ""} $${cost.toFixed(0)} [${fit}]`;
     }).join("; "));
   }
 
   return { text: lines.join("\n"), isPaid };
+}
+
+// Finds a single row by name for tools that take a spoken name instead of an
+// id (e.g. "mark rent paid"). Prefers an exact case-insensitive match; falls
+// back to a substring match. Returns an error string when the match is
+// ambiguous or missing, so the caller can relay that back to the user
+// instead of guessing which item they meant.
+function fuzzyFindOne(rows, query, nameKey = "name") {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return { error: "No name given." };
+  const exact = rows.filter((r) => String(r[nameKey]).toLowerCase() === q);
+  if (exact.length === 1) return { row: exact[0] };
+  if (exact.length > 1) {
+    return { error: `Found more than one match: ${exact.map((r) => r[nameKey]).join(", ")}. Which one did you mean?` };
+  }
+  const partial = rows.filter((r) => String(r[nameKey]).toLowerCase().includes(q));
+  if (partial.length === 1) return { row: partial[0] };
+  if (partial.length > 1) {
+    return { error: `Found more than one match: ${partial.map((r) => r[nameKey]).join(", ")}. Which one did you mean?` };
+  }
+  return { error: `Couldn't find anything named "${query}".` };
 }
 
 // Execute Hermie's action tools against the user's own data.
@@ -175,6 +282,65 @@ async function runTool(name, input, userId) {
         [userId, itemName, input.store ? String(input.store).trim() : null, Number(input.cost) || 0, input.link ? String(input.link).trim() : null]
       );
       return `Added "${itemName}" to the wishlist.`;
+    }
+    if (name === "add_expense") {
+      const nm = String(input.name || "").trim();
+      if (!nm) return "No bill name given.";
+      await pool.query(
+        `INSERT INTO expenses (user_id, name, category, amount, frequency, due_day, autopay)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          userId,
+          nm,
+          input.category || "other",
+          Number(input.amount) || 0,
+          input.frequency || "monthly",
+          input.due_day ? Number(input.due_day) : null,
+          Boolean(input.autopay),
+        ]
+      );
+      return `Added "${nm}" as a ${input.frequency || "monthly"} bill.`;
+    }
+    if (name === "mark_bill_paid") {
+      const { rows } = await pool.query("SELECT id, name FROM expenses WHERE user_id = $1", [userId]);
+      const found = fuzzyFindOne(rows, input.bill_name);
+      if (found.error) return found.error;
+      await pool.query("UPDATE expenses SET paid_at = now() WHERE id = $1 AND user_id = $2", [found.row.id, userId]);
+      return `Marked "${found.row.name}" as paid.`;
+    }
+    if (name === "edit_wishlist_item") {
+      const { rows } = await pool.query("SELECT * FROM wishlist_items WHERE user_id = $1 AND bought = false", [userId]);
+      const found = fuzzyFindOne(rows, input.item_name);
+      if (found.error) return found.error;
+      const cur = found.row;
+      const newName = input.new_name ?? cur.name;
+      const newStore = input.new_store !== undefined ? input.new_store : cur.store;
+      const newCost = input.new_cost != null ? Number(input.new_cost) : Number(cur.cost);
+      const newLink = input.new_link !== undefined ? input.new_link : cur.link;
+      await pool.query(
+        "UPDATE wishlist_items SET name = $1, store = $2, cost = $3, link = $4 WHERE id = $5 AND user_id = $6",
+        [newName, newStore, newCost, newLink, cur.id, userId]
+      );
+      return `Updated "${cur.name}"${newName !== cur.name ? ` to "${newName}"` : ""}.`;
+    }
+    if (name === "delete_wishlist_item") {
+      const { rows } = await pool.query("SELECT id, name FROM wishlist_items WHERE user_id = $1 AND bought = false", [userId]);
+      const found = fuzzyFindOne(rows, input.item_name);
+      if (found.error) return found.error;
+      await pool.query("DELETE FROM wishlist_items WHERE id = $1 AND user_id = $2", [found.row.id, userId]);
+      return `Removed "${found.row.name}" from the wishlist.`;
+    }
+    if (name === "mark_wishlist_bought") {
+      const { rows } = await pool.query("SELECT id, name FROM wishlist_items WHERE user_id = $1 AND bought = false", [userId]);
+      const found = fuzzyFindOne(rows, input.item_name);
+      if (found.error) return found.error;
+      await pool.query("UPDATE wishlist_items SET bought = true, bought_at = now() WHERE id = $1 AND user_id = $2", [found.row.id, userId]);
+      return `Marked "${found.row.name}" as bought \u2014 nice! Moved it off the active wishlist.`;
+    }
+    if (name === "set_reserve") {
+      const amt = Math.max(0, Number(input.amount) || 0);
+      await pool.query("UPDATE users SET reserve_amount = $1 WHERE user_id = $2", [amt, userId]);
+      return `Set your reserve to $${amt.toFixed(0)}. I'll factor that into wishlist timing from now on.`;
     }
     return "Unknown tool.";
   } catch (e) {

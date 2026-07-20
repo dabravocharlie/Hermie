@@ -75,11 +75,16 @@ function BankAccountsCard() {
   const [accounts, setAccounts] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [form, setForm] = useState(null); // {mode:'new'} | {mode:'edit', item}
+  const [reserve, setReserve] = useState(0);
+  const [editingReserve, setEditingReserve] = useState(false);
+  const [reserveVal, setReserveVal] = useState("");
+  const [reserveBusy, setReserveBusy] = useState(false);
 
   async function load() {
     try {
-      const rows = await api.get("/api/bank-accounts");
+      const [rows, profile] = await Promise.all([api.get("/api/bank-accounts"), api.get("/api/profile")]);
       setAccounts(rows);
+      setReserve(profile?.reserveAmount || 0);
     } catch {
       /* leave empty; user can still add one */
     } finally {
@@ -102,6 +107,24 @@ function BankAccountsCard() {
   async function del(id) {
     await api.del(`/api/bank-accounts/${id}`);
     setAccounts((p) => p.filter((a) => a.id !== id));
+  }
+
+  function startReserveEdit() {
+    setReserveVal(reserve ? String(reserve) : "");
+    setEditingReserve(true);
+  }
+  async function saveReserve(e) {
+    e.preventDefault();
+    setReserveBusy(true);
+    try {
+      const res = await api.put("/api/profile/reserve", { amount: reserveVal });
+      setReserve(res.reserveAmount);
+      setEditingReserve(false);
+    } catch {
+      /* keep the form open so they can retry */
+    } finally {
+      setReserveBusy(false);
+    }
   }
 
   return (
@@ -131,6 +154,27 @@ function BankAccountsCard() {
           <button onClick={() => del(a.id)} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 18, lineHeight: 1 }}>{"\u00D7"}</button>
         </div>
       ))}
+
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--divider)" }}>
+        {!editingReserve ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Reserve to keep untouched</p>
+              <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 1 }}>
+                {reserve > 0 ? "Wishlist timing accounts for this" : "None set \u2014 wishlist math uses your full balance"}
+              </p>
+            </div>
+            <p className="mono" style={{ fontSize: 16, color: reserve > 0 ? "var(--violet)" : "var(--ink-soft)" }}>{formatCurrency(reserve, true)}</p>
+            <button onClick={startReserveEdit} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 13, fontWeight: 500 }}>Edit</button>
+          </div>
+        ) : (
+          <form onSubmit={saveReserve} style={{ display: "flex", gap: 8 }}>
+            <input autoFocus type="number" inputMode="decimal" step="0.01" min="0" style={{ ...inputStyle, flex: 1 }} placeholder="0.00" value={reserveVal} onChange={(e) => setReserveVal(e.target.value)} />
+            <button type="button" onClick={() => setEditingReserve(false)} style={{ height: 42, padding: "0 14px", borderRadius: 10, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 14 }}>Cancel</button>
+            <button type="submit" disabled={reserveBusy} style={{ height: 42, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--violet)", color: "#fff", fontSize: 14, fontWeight: 500 }}>{reserveBusy ? "..." : "Save"}</button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

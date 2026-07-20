@@ -318,6 +318,7 @@ export default function Bills() {
   const [expenses, setExpenses] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
+  const [reserve, setReserve] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [incForm, setIncForm] = useState(null); // {mode:'new'} | {mode:'edit', item}
@@ -327,16 +328,18 @@ export default function Bills() {
   async function load() {
     try {
       setLoading(true);
-      const [inc, exp, wish, banks] = await Promise.all([
+      const [inc, exp, wish, banks, profile] = await Promise.all([
         api.get("/api/income"),
         api.get("/api/expenses"),
         api.get("/api/wishlist"),
         api.get("/api/bank-accounts"),
+        api.get("/api/profile"),
       ]);
       setIncome(inc);
       setExpenses(exp);
       setWishlist(wish);
       setBankAccounts(banks);
+      setReserve(profile?.reserveAmount || 0);
       setErr("");
     } catch (e) {
       setErr("Couldn't load your data. If the app was idle it may be waking up \u2014 wait a few seconds and try again.");
@@ -491,10 +494,13 @@ export default function Bills() {
             <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, color: "var(--ink)" }}>Wishlist</span>
             {!wishForm && <button onClick={() => setWishForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
           </div>
-          <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>Things you want to buy. Hermie shows how each fits your budget.</p>
+          <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>
+            Things you want to buy. Hermie shows how each fits your budget.
+            {reserve > 0 ? ` Keeping a ${formatCurrency(reserve)} reserve untouched.` : ""}
+          </p>
           {wishForm && <div style={{ marginTop: 4 }}><WishForm initial={wishForm.mode === "edit" ? wishForm.item : null} onSave={saveWish} onCancel={() => setWishForm(null)} /></div>}
           {wishlist.map((w) => (
-            <WishRow key={w.id} item={w} fit={budgetFit(w.cost, safe, bankTotal)}
+            <WishRow key={w.id} item={w} fit={budgetFit(w.cost, safe, bankTotal, reserve)}
               onEdit={() => setWishForm({ mode: "edit", item: w })} onDelete={() => delWish(w.id)}
               onAddToCalendar={addWishToCalendar} />
           ))}
