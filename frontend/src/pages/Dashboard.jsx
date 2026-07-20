@@ -16,7 +16,8 @@ const fieldLabel = { fontSize: 12, color: "var(--ink-soft)", marginBottom: 6, di
 
 function AccountForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || "");
-  const [balance, setBalance] = useState(initial ? String(initial.balance) : "");
+  const [negative, setNegative] = useState(initial ? Number(initial.balance) < 0 : false);
+  const [magnitude, setMagnitude] = useState(initial ? String(Math.abs(Number(initial.balance))) : "");
   const [busy, setBusy] = useState(false);
 
   async function submit(e) {
@@ -24,7 +25,9 @@ function AccountForm({ initial, onSave, onCancel }) {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      await onSave({ name, balance });
+      const n = Math.abs(Number(magnitude) || 0);
+      const balance = negative ? -n : n;
+      await onSave({ name, balance: String(balance) });
     } finally {
       setBusy(false);
     }
@@ -37,8 +40,27 @@ function AccountForm({ initial, onSave, onCancel }) {
         <input autoFocus style={inputStyle} placeholder="e.g. Checking, Savings" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div>
-        <label style={fieldLabel}>Balance (can be negative)</label>
-        <input style={inputStyle} type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={balance} onChange={(e) => setBalance(e.target.value)} />
+        <label style={fieldLabel}>Balance</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setNegative((v) => !v)}
+            aria-pressed={negative}
+            aria-label={negative ? "Negative \u2014 tap to mark positive" : "Positive \u2014 tap to mark negative"}
+            style={{
+              width: 44, height: 44, borderRadius: 10, flexShrink: 0, fontSize: 20, fontWeight: 700,
+              border: `1px solid ${negative ? "var(--amber-bd)" : "var(--divider)"}`,
+              background: negative ? "var(--amber-bg)" : "transparent",
+              color: negative ? "var(--amber)" : "var(--ink-soft)",
+            }}
+          >
+            {negative ? "\u2212" : "+"}
+          </button>
+          <input style={{ ...inputStyle, flex: 1 }} type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" value={magnitude} onChange={(e) => setMagnitude(e.target.value)} />
+        </div>
+        <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 5 }}>
+          {negative ? "Marked negative \u2014 e.g. overdrawn or a credit card balance" : "Tap the sign to mark this account negative"}
+        </p>
       </div>
       <div style={{ display: "flex", gap: 10 }}>
         <button type="button" onClick={onCancel} style={{ flex: 1, height: 42, borderRadius: 10, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 14 }}>Cancel</button>
