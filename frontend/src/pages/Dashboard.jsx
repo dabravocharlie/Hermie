@@ -12,77 +12,103 @@ const inputStyle = {
   background: "var(--bg)", color: "var(--ink)", padding: "0 12px", fontSize: 16,
 };
 
-function BankBalanceCard() {
-  const api = useApi();
-  const [balance, setBalance] = useState(null);
-  const [updatedAt, setUpdatedAt] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState("");
+const fieldLabel = { fontSize: 12, color: "var(--ink-soft)", marginBottom: 6, display: "block" };
+
+function AccountForm({ initial, onSave, onCancel }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [balance, setBalance] = useState(initial ? String(initial.balance) : "");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const p = await api.get("/api/profile");
-        setBalance(p.bankBalance);
-        setUpdatedAt(p.bankBalanceUpdatedAt);
-      } catch {
-        /* leave blank; user can still set it */
-      } finally {
-        setLoaded(true);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function startEdit() {
-    setVal(balance != null ? String(balance) : "");
-    setEditing(true);
-  }
-
-  async function save(e) {
+  async function submit(e) {
     e.preventDefault();
+    if (!name.trim()) return;
     setBusy(true);
     try {
-      const res = await api.put("/api/profile/bank-balance", { balance: val });
-      setBalance(res.bankBalance);
-      setUpdatedAt(res.bankBalanceUpdatedAt);
-      setEditing(false);
-    } catch {
-      /* keep the form open so they can retry */
+      await onSave({ name, balance });
     } finally {
       setBusy(false);
     }
   }
 
-  const updatedLabel = updatedAt
-    ? new Date(updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    : null;
+  return (
+    <form onSubmit={submit} style={{ display: "grid", gap: 10, marginTop: 10, marginBottom: 12 }}>
+      <div>
+        <label style={fieldLabel}>Account name</label>
+        <input autoFocus style={inputStyle} placeholder="e.g. Checking, Savings" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div>
+        <label style={fieldLabel}>Balance (can be negative)</label>
+        <input style={inputStyle} type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={balance} onChange={(e) => setBalance(e.target.value)} />
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button type="button" onClick={onCancel} style={{ flex: 1, height: 42, borderRadius: 10, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 14 }}>Cancel</button>
+        <button type="submit" disabled={busy} style={{ flex: 1, height: 42, borderRadius: 10, border: "none", background: "var(--violet)", color: "#fff", fontSize: 14, fontWeight: 500 }}>{busy ? "Saving..." : initial ? "Save changes" : "Add account"}</button>
+      </div>
+    </form>
+  );
+}
+
+function BankAccountsCard() {
+  const api = useApi();
+  const [accounts, setAccounts] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [form, setForm] = useState(null); // {mode:'new'} | {mode:'edit', item}
+
+  async function load() {
+    try {
+      const rows = await api.get("/api/bank-accounts");
+      setAccounts(rows);
+    } catch {
+      /* leave empty; user can still add one */
+    } finally {
+      setLoaded(true);
+    }
+  }
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const total = useMemo(() => accounts.reduce((s, a) => s + Number(a.balance), 0), [accounts]);
+
+  async function save(data) {
+    if (form?.mode === "edit") await api.put(`/api/bank-accounts/${form.item.id}`, data);
+    else await api.post("/api/bank-accounts", data);
+    setForm(null);
+    await load();
+  }
+  async function del(id) {
+    await api.del(`/api/bank-accounts/${id}`);
+    setAccounts((p) => p.filter((a) => a.id !== id));
+  }
 
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--card-bd)", borderRadius: 20, padding: 18, boxShadow: "0 0 20px var(--violet-glow)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Bank balance</p>
-        {!editing && <button onClick={startEdit} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 13, fontWeight: 500 }}>Edit</button>}
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Bank accounts</p>
+        {!form && <button onClick={() => setForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 13, fontWeight: 500 }}>+ Add</button>}
       </div>
 
-      {!editing ? (
-        <>
-          <p className="mono" style={{ fontSize: 28, fontWeight: 500, color: "var(--ink)", margin: "6px 0 0" }}>
-            {!loaded ? "\u2014" : balance != null ? formatCurrency(balance, true) : "Not set"}
-          </p>
-          <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
-            {updatedLabel ? `Updated ${updatedLabel} \u00B7 entered manually` : "Tap Edit to enter what's actually in your account"}
-          </p>
-        </>
-      ) : (
-        <form onSubmit={save} style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <input autoFocus type="number" inputMode="decimal" step="0.01" style={inputStyle} placeholder="0.00" value={val} onChange={(e) => setVal(e.target.value)} />
-          <button type="button" onClick={() => setEditing(false)} style={{ height: 42, padding: "0 14px", borderRadius: 10, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 14 }}>Cancel</button>
-          <button type="submit" disabled={busy} style={{ height: 42, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--violet)", color: "#fff", fontSize: 14, fontWeight: 500 }}>{busy ? "..." : "Save"}</button>
-        </form>
-      )}
+      <p className="mono" style={{ fontSize: 28, fontWeight: 500, color: total < 0 ? "var(--amber)" : "var(--ink)", margin: "6px 0 2px" }}>
+        {!loaded ? "\u2014" : accounts.length ? formatCurrency(total, true) : "Not set"}
+      </p>
+      <p style={{ fontSize: 11, color: "var(--ink-soft)" }}>
+        {accounts.length ? `Across ${accounts.length} account${accounts.length === 1 ? "" : "s"} \u00B7 entered manually` : "Add an account to track what you actually have"}
+      </p>
+
+      {form && <AccountForm initial={form.mode === "edit" ? form.item : null} onSave={save} onCancel={() => setForm(null)} />}
+
+      {accounts.map((a) => (
+        <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "1px solid var(--divider)", marginTop: 4 }}>
+          <button onClick={() => setForm({ mode: "edit", item: a })} style={{ flex: 1, textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
+            <p style={{ fontSize: 14, color: "var(--ink)" }}>{a.name}</p>
+          </button>
+          <button onClick={() => setForm({ mode: "edit", item: a })} style={{ background: "transparent", border: "none", cursor: "pointer" }}>
+            <p className="mono" style={{ fontSize: 14, color: Number(a.balance) < 0 ? "var(--amber)" : "var(--ink)" }}>{formatCurrency(a.balance, true)}</p>
+          </button>
+          <button onClick={() => del(a.id)} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 18, lineHeight: 1 }}>{"\u00D7"}</button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -181,7 +207,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: "4px 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <BankBalanceCard />
+      <BankAccountsCard />
 
       {/* Hero */}
       <div style={{ background: "var(--card)", border: "1px solid var(--card-bd)", borderRadius: 20, padding: 20, boxShadow: "0 0 24px var(--violet-glow)" }}>

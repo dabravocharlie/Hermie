@@ -23,7 +23,7 @@ You have tools to help the user stay organized. Use them when they ask you to re
 - add_event: add a calendar reminder (IPO date, bill, appointment).
 - add_to_wishlist: add an item they want to purchase (not a stock) to their purchase wishlist.
 
-The user's snapshot below may include a bank balance and a "Purchase wishlist" with a budget-fit note per item (whether it fits their current monthly leftover or roughly how long it'd take to save for). If asked about timing a purchase, describe what the numbers show factually (e.g. "at your current pace you'd have this saved in about 2 months") rather than issuing a directive like "you should buy it now." This is budget math on their own numbers, not investment advice, but keep the same non-directive tone unless the user has premium access (see below).`;
+The user's snapshot below may include one or more named bank accounts and a "Purchase wishlist" with a budget-fit note per item (whether it's already covered by their current bank balance, or roughly how long it'd take to save the remaining amount). If asked about timing a purchase, describe what the numbers show factually (e.g. "you've already got that covered" or "at your current pace you'd have the rest saved in about 2 months") rather than issuing a directive like "you should buy it now." This is budget math on their own numbers, not investment advice, but keep the same non-directive tone unless the user has premium access (see below).`;
 
 const PREMIUM_ADDENDUM = `
 
@@ -86,7 +86,7 @@ const TOOLS = [
 // Build a compact snapshot of the user's finances for grounding, plus
 // whether they're on the paid tier (shapes the system prompt).
 async function buildContext(userId) {
-  const [inc, exp, hold, watch, events, notes, wish, acct] = await Promise.all([
+  const [inc, exp, hold, watch, events, notes, wish, acct, banks] = await Promise.all([
     pool.query("SELECT name, amount, frequency FROM income_sources WHERE user_id = $1", [userId]),
     pool.query("SELECT name, category, amount, frequency, due_day FROM expenses WHERE user_id = $1", [userId]),
     pool.query("SELECT symbol, shares, cost_basis FROM holdings WHERE user_id = $1", [userId]),
@@ -94,21 +94,22 @@ async function buildContext(userId) {
     pool.query("SELECT title, type, event_date FROM calendar_events WHERE user_id = $1 ORDER BY event_date ASC LIMIT 8", [userId]),
     pool.query("SELECT author, symbol, body FROM research_notes WHERE user_id = $1 ORDER BY created_at DESC LIMIT 6", [userId]),
     pool.query("SELECT name, store, cost FROM wishlist_items WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10", [userId]),
-    pool.query("SELECT is_paid, bank_balance FROM users WHERE user_id = $1", [userId]),
+    pool.query("SELECT is_paid FROM users WHERE user_id = $1", [userId]),
+    pool.query("SELECT name, balance FROM bank_accounts WHERE user_id = $1 ORDER BY created_at ASC", [userId]),
   ]);
 
   const monthlyIncome = inc.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
   const monthlyExpenses = exp.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
   const monthlyLeft = monthlyIncome - monthlyExpenses;
   const isPaid = acct.rows[0]?.is_paid || false;
-  const bankBalance = acct.rows[0]?.bank_balance;
+  const bankTotal = banks.rows.reduce((s, b) => s + Number(b.balance), 0);
 
   const lines = [];
   lines.push(`Monthly income: $${monthlyIncome.toFixed(0)}`);
   lines.push(`Monthly bills: $${monthlyExpenses.toFixed(0)}`);
   lines.push(`Left over per month: $${monthlyLeft.toFixed(0)}`);
-  if (bankBalance !== null && bankBalance !== undefined) {
-    lines.push(`Bank balance (self-reported): $${Number(bankBalance).toFixed(0)}`);
+  if (banks.rows.length) {
+    lines.push("Bank accounts (self-reported): " + banks.rows.map((b) => `${b.name} $${Number(b.balance).toFixed(0)}`).join(", ") + ` \u2014 total $${bankTotal.toFixed(0)}`);
   }
   if (exp.rows.length) {
     lines.push("Bills: " + exp.rows.map((e) => `${e.name} ($${Number(e.amount).toFixed(0)} ${e.frequency}, ${e.category})`).join("; "));
@@ -122,7 +123,15 @@ async function buildContext(userId) {
   if (wish.rows.length) {
     lines.push("Purchase wishlist: " + wish.rows.map((w) => {
       const cost = Number(w.cost) || 0;
-      const fit = monthlyLeft <= 0 ? "budget is tight right now" : cost <= monthlyLeft ? "fits in this month's leftover budget" : `about ${Math.ceil(cost / monthlyLeft)} months to save at current pace`;
+      const remaining = cost - bankTotal;
+      let fit;
+      if (remaining <= 0) {
+        fit = "already covered by current bank balance";
+      } else if (monthlyLeft <= 0) {
+        fit = "budget is tight right now, no monthly leftover to add toward it";
+      } else {
+        fit = `about ${Math.ceil(remaining / monthlyLeft)} months to save the remaining $${remaining.toFixed(0)} at current pace`;
+      }
       return `${w.name}${w.store ? ` (${w.store})` : ""} $${cost.toFixed(0)} [${fit}]`;
     }).join("; "));
   }

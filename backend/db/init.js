@@ -25,10 +25,23 @@ const statements = [
   // same column later.
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`,
 
-  // Manually-entered bank balance (free-tier). Paid tier will eventually
-  // offer a real bank connection as its own separate feature.
+  // Manually-entered bank balance (legacy single-value field, kept for the
+  // one-time migration into bank_accounts below). No longer written to by
+  // the app; superseded by the bank_accounts table.
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_balance NUMERIC(12,2)`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_balance_updated_at TIMESTAMPTZ`,
+
+  // Named bank accounts (Checking, Savings, etc). Balance can be negative
+  // (overdrawn or a credit-style account). Manual entry for now; real bank
+  // connection is a separate future feature.
+  `CREATE TABLE IF NOT EXISTS bank_accounts (
+    id           SERIAL PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    balance      NUMERIC(12,2) NOT NULL DEFAULT 0,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bank_accounts_user ON bank_accounts(user_id)`,
 
   // Income: how much, how often, when next paid.
   `CREATE TABLE IF NOT EXISTS income_sources (

@@ -55,29 +55,47 @@ export function categoryMeta(key) {
   );
 }
 
-// Given an item's cost and the user's current monthly leftover (safeToSpend),
-// describe when it fits their budget. Deliberately factual/descriptive, never
-// directive ("you should buy this") \u2014 states what the numbers show.
-// Includes a raw targetDate (Date | null) so callers can prefill a calendar
-// reminder without re-deriving the math.
-export function budgetFit(cost, monthlyLeft) {
+// Given an item's cost, the user's current monthly leftover (safeToSpend),
+// and their total bank balance across accounts, describe when it fits their
+// budget. Deliberately factual/descriptive, never directive ("you should buy
+// this") \u2014 states what the numbers show. Money already saved counts first;
+// only the remaining amount is projected against the monthly pace. Includes
+// a raw targetDate (Date | null) so callers can prefill a calendar reminder
+// without re-deriving the math.
+export function budgetFit(cost, monthlyLeft, bankTotal = 0) {
   const c = Number(cost) || 0;
   const left = Number(monthlyLeft) || 0;
+  const bank = Number(bankTotal) || 0;
+  const remaining = c - bank;
 
+  if (remaining <= 0) {
+    return {
+      status: "fits",
+      label: "Already covered by your bank balance",
+      detail: `Your accounts total ${formatCurrency(bank)}, enough for this ${formatCurrency(c)} item.`,
+      targetDate: null,
+    };
+  }
   if (left <= 0) {
-    return { status: "tight", label: "Budget is tight right now", detail: "No monthly leftover currently \u2014 review bills or income first.", targetDate: null };
+    return {
+      status: "tight",
+      label: "Budget is tight right now",
+      detail: bank > 0
+        ? `You have ${formatCurrency(bank)} saved, but no monthly leftover currently to add toward the remaining ${formatCurrency(remaining)}.`
+        : "No monthly leftover currently \u2014 review bills or income first.",
+      targetDate: null,
+    };
   }
-  if (c <= left) {
-    return { status: "fits", label: "Fits in this month's budget", detail: `You have about ${formatCurrency(left)} left over this month.`, targetDate: null };
-  }
-  const months = Math.ceil(c / left);
+  const months = Math.ceil(remaining / left);
   const target = new Date();
   target.setMonth(target.getMonth() + months);
   const targetLabel = target.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   return {
     status: "save",
     label: `About ${months} month${months === 1 ? "" : "s"} to save`,
-    detail: `At your current pace (${formatCurrency(left)}/mo left over), you'd have this by around ${targetLabel}.`,
+    detail: bank > 0
+      ? `You have ${formatCurrency(bank)} saved and about ${formatCurrency(left)}/mo left over \u2014 you'd cover the remaining ${formatCurrency(remaining)} by around ${targetLabel}.`
+      : `At your current pace (${formatCurrency(left)}/mo left over), you'd have this by around ${targetLabel}.`,
     targetDate: target,
   };
 }

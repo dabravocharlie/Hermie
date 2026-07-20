@@ -14,6 +14,7 @@ import researchRouter from "./routes/research.js";
 import hermieRouter from "./routes/hermie.js";
 import profileRouter from "./routes/profile.js";
 import wishlistRouter from "./routes/wishlist.js";
+import bankAccountsRouter from "./routes/bank-accounts.js";
 
 dotenv.config();
 
@@ -73,6 +74,9 @@ app.use("/api/profile", requireUser, profileRouter);
 
 // Purchase wishlist \u2014 items the user wants to buy, with budget-fit guidance.
 app.use("/api/wishlist", requireUser, wishlistRouter);
+
+// Named bank accounts, manually entered. Balance may be negative.
+app.use("/api/bank-accounts", requireUser, bankAccountsRouter);
 
 app.listen(PORT, () => {
   console.log(`Hermie API listening on port ${PORT}`);
