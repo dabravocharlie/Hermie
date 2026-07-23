@@ -22,10 +22,10 @@ function gainColor(n) {
   return "var(--ink-soft)";
 }
 
-function AddForm({ onSave, onCancel }) {
-  const [symbol, setSymbol] = useState("");
-  const [shares, setShares] = useState("");
-  const [cost, setCost] = useState("");
+function AddForm({ initial, onSave, onCancel }) {
+  const [symbol, setSymbol] = useState(initial?.symbol || "");
+  const [shares, setShares] = useState(initial ? String(initial.shares) : "");
+  const [cost, setCost] = useState(initial ? String(initial.cost_basis) : "");
   const [busy, setBusy] = useState(false);
   async function submit(e) {
     e.preventDefault();
@@ -56,7 +56,7 @@ function AddForm({ onSave, onCancel }) {
       </div>
       <div style={{ display: "flex", gap: 12 }}>
         <button type="button" onClick={onCancel} style={{ flex: 1, height: 44, borderRadius: 12, border: "1px solid var(--divider)", background: "transparent", color: "var(--ink-soft)", fontSize: 15 }}>Cancel</button>
-        <button type="submit" disabled={busy} style={{ flex: 1, height: 44, borderRadius: 12, border: "none", background: "var(--violet)", color: "#fff", fontSize: 15, fontWeight: 500 }}>{busy ? "Adding..." : "Add holding"}</button>
+        <button type="submit" disabled={busy} style={{ flex: 1, height: 44, borderRadius: 12, border: "none", background: "var(--violet)", color: "#fff", fontSize: 15, fontWeight: 500 }}>{busy ? "Saving..." : initial ? "Save changes" : "Add holding"}</button>
       </div>
     </form>
   );
@@ -70,7 +70,7 @@ export default function Portfolio() {
   const [loading, setLoading] = useState(true);
   const [newsLoading, setNewsLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState(null); // {mode:'new'} | {mode:'edit', item}
 
   async function loadPortfolio() {
     try {
@@ -104,8 +104,9 @@ export default function Portfolio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
-  async function addHolding(d) {
-    await api.post("/api/holdings", d);
+  async function saveHolding(d) {
+    if (form?.mode === "edit") await api.put(`/api/holdings/${form.item.id}`, d);
+    else await api.post("/api/holdings", d);
     await loadPortfolio();
   }
   async function delHolding(id) {
@@ -173,16 +174,16 @@ export default function Portfolio() {
           <div style={{ background: "var(--card)", border: "1px solid var(--card-bd)", borderRadius: 20, padding: 18, boxShadow: "0 0 22px var(--violet-glow)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, color: "var(--ink)" }}>Holdings</span>
-              {!showAdd && <button onClick={() => setShowAdd(true)} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
+              {!form && <button onClick={() => setForm({ mode: "new" })} style={{ background: "transparent", border: "none", color: "var(--violet)", fontSize: 14, fontWeight: 500 }}>+ Add</button>}
             </div>
-            {showAdd && <div style={{ marginTop: 14 }}><AddForm onSave={addHolding} onCancel={() => setShowAdd(false)} /></div>}
+            {form && <div style={{ marginTop: 14 }}><AddForm initial={form.mode === "edit" ? form.item : null} onSave={saveHolding} onCancel={() => setForm(null)} /></div>}
             {holdings.map((h) => (
               <div key={h.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <button onClick={() => setForm({ mode: "edit", item: h })} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
                   <p style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)" }}>{h.symbol}</p>
                   <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 1 }}>{Number(h.shares)} sh @ {formatCurrency(h.cost_basis, true)}</p>
-                </div>
-                <div style={{ textAlign: "right" }}>
+                </button>
+                <button onClick={() => setForm({ mode: "edit", item: h })} style={{ textAlign: "right", background: "transparent", border: "none", cursor: "pointer" }}>
                   {h.priceOk ? (
                     <>
                       <p className="mono" style={{ fontSize: 15, color: "var(--ink)" }}>{formatCurrency(h.value, true)}</p>
@@ -191,11 +192,11 @@ export default function Portfolio() {
                   ) : (
                     <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>price n/a</p>
                   )}
-                </div>
+                </button>
                 <button onClick={() => delHolding(h.id)} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 20, lineHeight: 1 }}>{"\u00D7"}</button>
               </div>
             ))}
-            {!holdings.length && !showAdd && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add what you own to track value, gains, and today's moves.</p>}
+            {!holdings.length && !form && <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 10 }}>Add what you own to track value, gains, and today's moves.</p>}
           </div>
         </>
       )}
