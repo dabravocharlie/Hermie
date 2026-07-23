@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import {
   actualMonthlyTotal,
+  remainingMonthlyTotal,
   formatCurrency,
   FREQUENCIES,
   freqShort,
@@ -363,14 +364,15 @@ export default function Bills() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const monthlyIncome = useMemo(() => actualMonthlyTotal(income), [income]);
+  const monthlyIncome = useMemo(() => actualMonthlyTotal(income), [income]); // ongoing average \u2014 used for wishlist savings pace
+  const incomeRemaining = useMemo(() => remainingMonthlyTotal(income), [income]); // what hasn't arrived yet \u2014 used for the live "safe to spend" snapshot
   const unpaidExpenses = useMemo(
     () => actualMonthlyTotal(expenses.filter((e) => !isPaidForCycle(e))),
     [expenses]
   );
   const bankTotal = useMemo(() => bankAccounts.reduce((s, a) => s + Number(a.balance), 0), [bankAccounts]);
-  const monthlyLeftover = monthlyIncome - unpaidExpenses; // pure cash-flow, no bank/reserve \u2014 what budgetFit expects
-  const safe = bankTotal + monthlyIncome - unpaidExpenses - reserve; // full picture, for display
+  const monthlyLeftover = monthlyIncome - unpaidExpenses; // pure ongoing cash-flow rate, no bank/reserve \u2014 what budgetFit expects for savings pacing
+  const safe = bankTotal + incomeRemaining - unpaidExpenses - reserve; // full picture right now, for display
 
   const sortedExpenses = useMemo(() => {
     return [...expenses].sort((a, b) => {
@@ -458,12 +460,12 @@ export default function Bills() {
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12, fontSize: 12, color: "var(--ink-soft)" }}>
               <span><span style={{ color: "var(--green)" }}>&#9679;</span> Bank {formatCurrency(bankTotal)}</span>
-              <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income {formatCurrency(monthlyIncome)}</span>
+              <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income left {formatCurrency(incomeRemaining)}</span>
               <span><span style={{ color: "var(--violet)" }}>&#9679;</span> Bills owed {formatCurrency(unpaidExpenses)}</span>
               <span><span style={{ color: "var(--amber)" }}>&#9679;</span> Reserve {formatCurrency(reserve)}</span>
             </div>
             <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
-              Bank + income \u2212 unpaid bills{reserve > 0 ? " \u2212 reserve" : ""}. Same number as your home screen.
+              Bank + income left this month \u2212 unpaid bills{reserve > 0 ? " \u2212 reserve" : ""}. Same number as your home screen.
             </p>
           </div>
 

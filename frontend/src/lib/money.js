@@ -1,4 +1,4 @@
-import { occurrencesInMonth } from "./dates.js";
+import { occurrencesInMonth, remainingOccurrencesInMonth } from "./dates.js";
 
 // Keep the frontend's money math identical to the backend's.
 export function toMonthly(amount, frequency) {
@@ -35,6 +35,25 @@ export function actualMonthlyTotal(items, from = new Date()) {
   const year = from.getFullYear();
   const month = from.getMonth();
   return items.reduce((s, item) => s + actualMonthlyAmount(item, year, month), 0);
+}
+
+// The remaining amount for one item from today through the end of the
+// month \u2014 counts only occurrences that HAVEN'T happened yet. Use this
+// (not actualMonthlyAmount) for a "right now" snapshot like Safe to Spend,
+// since anything already received is presumably already in the bank total.
+// Falls back to half the smoothed average when there's no anchor date, as a
+// rough "about half the month remains" approximation.
+export function remainingMonthlyAmount(item, from = new Date()) {
+  const amt = Number(item.amount) || 0;
+  const freq = item.frequency;
+  const anchor = item.next_date;
+  if (!anchor) return toMonthly(amt, freq) / 2;
+  const n = remainingOccurrencesInMonth(anchor, freq, from);
+  return amt * (n ?? 0);
+}
+
+export function remainingMonthlyTotal(items, from = new Date()) {
+  return items.reduce((s, item) => s + remainingMonthlyAmount(item, from), 0);
 }
 
 // $1,284 style. Pass cents=true for line items like $142.50.

@@ -34,3 +34,36 @@ export function occurrencesInMonth(anchorStr, frequency, year, month) {
   }
   return count;
 }
+
+// Same idea as occurrencesInMonth, but counts only occurrences from `from`
+// (today) through the end of that month \u2014 i.e. what HASN'T happened yet.
+// This is the one to use for "safe to spend right now": income that already
+// arrived earlier this month is presumably already reflected in the current
+// bank balance, so counting the whole month's income on top would double it.
+export function remainingOccurrencesInMonth(anchorStr, frequency, from = new Date()) {
+  const anchor = parseDateLocal(anchorStr);
+  if (!anchor) return null;
+  const today = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  if (frequency === "monthly" || frequency === "once" || !frequency) {
+    const lastDay = monthEnd.getDate();
+    const day = Math.min(anchor.getDate(), lastDay);
+    const thisMonthOccurrence = new Date(today.getFullYear(), today.getMonth(), day);
+    return thisMonthOccurrence >= today ? 1 : 0;
+  }
+  const step = frequency === "weekly" ? 7 : frequency === "biweekly" ? 14 : null;
+  if (!step) return 1;
+
+  const msPerDay = 86400000;
+  const diffDays = Math.round((today - anchor) / msPerDay);
+  const mod = ((diffDays % step) + step) % step;
+  let d = mod === 0 ? today : new Date(today.getFullYear(), today.getMonth(), today.getDate() + (step - mod));
+
+  let count = 0;
+  while (d <= monthEnd) {
+    count++;
+    d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + step);
+  }
+  return count;
+}

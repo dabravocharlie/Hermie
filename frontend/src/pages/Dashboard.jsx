@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import Wings from "../components/Wings.jsx";
-import { formatCurrency, categoryMeta, actualMonthlyTotal } from "../lib/money.js";
+import { formatCurrency, categoryMeta, actualMonthlyTotal, remainingMonthlyTotal } from "../lib/money.js";
 import { upcomingBills, upcomingPaydays, dueLabel, parseDateLocal, daysUntil, whenLabel, isPaidForCycle } from "../lib/dates.js";
 import { buildInsight } from "../lib/insight.js";
 
@@ -234,7 +234,7 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const incomeTotal = useMemo(() => actualMonthlyTotal(income), [income]);
+  const incomeTotal = useMemo(() => remainingMonthlyTotal(income), [income]);
   const bankTotal = useMemo(() => bankAccounts.reduce((s, a) => s + Number(a.balance), 0), [bankAccounts]);
   const bills = useMemo(
     () => actualMonthlyTotal(expenses.filter((e) => !isPaidForCycle(e))),
@@ -296,12 +296,12 @@ export default function Dashboard() {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12, fontSize: 12, color: "var(--ink-soft)" }}>
           <span><span style={{ color: "var(--green)" }}>&#9679;</span> Bank {formatCurrency(bankTotal)}</span>
-          <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income {formatCurrency(incomeTotal)}</span>
+          <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income left {formatCurrency(incomeTotal)}</span>
           <span><span style={{ color: "var(--violet)" }}>&#9679;</span> Bills owed {formatCurrency(bills)}</span>
           <span><span style={{ color: "var(--amber)" }}>&#9679;</span> Reserve {formatCurrency(reserve)}</span>
         </div>
         <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
-          Bank + income \u2212 unpaid bills{reserve > 0 ? " \u2212 reserve" : ""}. Updates as bills are marked paid.
+          Bank + income left this month \u2212 unpaid bills{reserve > 0 ? " \u2212 reserve" : ""}. Updates as paydays and bills happen.
         </p>
       </div>
 

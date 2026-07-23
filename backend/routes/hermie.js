@@ -1,7 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { callAnthropic, hasKey } from "../lib/anthropic.js";
-import { actualMonthlyTotal } from "../lib/money.js";
+import { actualMonthlyTotal, remainingMonthlyTotal } from "../lib/money.js";
 
 const router = express.Router();
 
@@ -29,7 +29,9 @@ You have tools to help the user stay organized. Use them when they ask you to re
 
 Tools that match an existing bill or wishlist item by name (mark_bill_paid, edit_wishlist_item, delete_wishlist_item, mark_wishlist_bought) will tell you if the name is ambiguous or not found \u2014 relay that back to the user and ask them to clarify rather than guessing which one they meant.
 
-The user's snapshot below may include one or more named bank accounts, a reserve amount they want to keep untouched, and a "Purchase wishlist" with a budget-fit note per item. That note already accounts for the reserve: an item can be "already covered," "would dip into the reserve" (they technically have the money, but spending it would drop them below the line they've asked to protect), or "needs more time to save." When an item would dip into the reserve, recommend waiting until the date given rather than suggesting they buy it now \u2014 that's the whole point of the reserve. Describe all of this factually (e.g. "that would dip into your reserve; waiting until around March would cover it without touching that buffer") rather than as a directive, and never override or second-guess the reserve the user has set.`;
+The user's snapshot below may include one or more named bank accounts, a reserve amount they want to keep untouched, and a "Purchase wishlist" with a budget-fit note per item. That note already accounts for the reserve: an item can be "already covered," "would dip into the reserve" (they technically have the money, but spending it would drop them below the line they've asked to protect), or "needs more time to save." When an item would dip into the reserve, recommend waiting until the date given rather than suggesting they buy it now \u2014 that's the whole point of the reserve. Describe all of this factually (e.g. "that would dip into your reserve; waiting until around March would cover it without touching that buffer") rather than as a directive, and never override or second-guess the reserve the user has set.
+
+If the user asks how much they can safely spend right now, always quote the "Safe to spend RIGHT NOW" figure given below directly \u2014 do not add the bank total and the monthly income together yourself. Income already received earlier this month is presumably already reflected in the bank total, so re-adding the full month's income on top of it would overstate what they actually have. The "Monthly income" and "Left over per month" figures are a separate, ongoing pacing rate (useful for wishlist savings timelines and general budgeting conversation) \u2014 not a live balance, and not interchangeable with the "right now" figure.`;
 
 const PREMIUM_ADDENDUM = `
 
@@ -178,11 +180,19 @@ async function buildContext(userId) {
   const reserve = Number(acct.rows[0]?.reserve_amount) || 0;
   const bankTotal = banks.rows.reduce((s, b) => s + Number(b.balance), 0);
   const available = Math.max(0, bankTotal - reserve);
+  // "Right now" snapshot: only income that HASN'T arrived yet gets added to
+  // the current bank total, so already-received pay isn't double counted.
+  // Approximates bills as the full monthly total (the backend doesn't yet
+  // track which specific bills are already paid this cycle the way the app
+  // UI does), so this may run slightly conservative if some are paid.
+  const incomeStillComing = remainingMonthlyTotal(inc.rows);
+  const safeToSpendNow = bankTotal + incomeStillComing - monthlyExpenses - reserve;
 
   const lines = [];
-  lines.push(`Monthly income: $${monthlyIncome.toFixed(0)}`);
-  lines.push(`Monthly bills: $${monthlyExpenses.toFixed(0)}`);
-  lines.push(`Left over per month: $${monthlyLeft.toFixed(0)}`);
+  lines.push(`Monthly income (ongoing average, for pacing): $${monthlyIncome.toFixed(0)}`);
+  lines.push(`Monthly bills (ongoing average, for pacing): $${monthlyExpenses.toFixed(0)}`);
+  lines.push(`Left over per month (ongoing rate, NOT a live balance): $${monthlyLeft.toFixed(0)}`);
+  lines.push(`Safe to spend RIGHT NOW (bank + income still coming this month - bills - reserve, matches the app's home screen): $${safeToSpendNow.toFixed(0)}`);
   if (banks.rows.length) {
     lines.push("Bank accounts (self-reported): " + banks.rows.map((b) => `${b.name} $${Number(b.balance).toFixed(0)}`).join(", ") + ` \u2014 total $${bankTotal.toFixed(0)}`);
   }
