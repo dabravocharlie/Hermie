@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import Wings from "../components/Wings.jsx";
-import { formatCurrency, categoryMeta } from "../lib/money.js";
-import { upcomingBills, upcomingPaydays, dueLabel, parseDateLocal, daysUntil, whenLabel } from "../lib/dates.js";
+import { formatCurrency, categoryMeta, toMonthly } from "../lib/money.js";
+import { upcomingBills, upcomingPaydays, dueLabel, parseDateLocal, daysUntil, whenLabel, isPaidForCycle } from "../lib/dates.js";
 import { buildInsight } from "../lib/insight.js";
 
 const EVENT_EMOJI = { ipo: "\u{1F680}", bill: "\u{1F4B3}", appointment: "\u{1F4C5}", reminder: "\u{1F514}" };
@@ -185,6 +185,8 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState([]);
   const [events, setEvents] = useState([]);
   const [income, setIncome] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [reserve, setReserve] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [pt, setPt] = useState(null); // portfolio totals for the "today" tile
@@ -192,16 +194,20 @@ export default function Dashboard() {
   async function load() {
     try {
       setLoading(true);
-      const [sum, exp, ev, inc] = await Promise.all([
+      const [sum, exp, ev, inc, banks, profile] = await Promise.all([
         api.get("/api/summary"),
         api.get("/api/expenses"),
         api.get("/api/events"),
         api.get("/api/income"),
+        api.get("/api/bank-accounts"),
+        api.get("/api/profile"),
       ]);
       setSummary(sum);
       setExpenses(exp);
       setEvents(ev);
       setIncome(inc);
+      setBankAccounts(banks);
+      setReserve(profile?.reserveAmount || 0);
       setErr("");
     } catch (e) {
       setErr("Couldn't reach your data. If the app was idle it may be waking up.");
@@ -229,8 +235,12 @@ export default function Dashboard() {
   }, []);
 
   const incomeTotal = summary?.monthlyIncome || 0;
-  const bills = summary?.monthlyExpenses || 0;
-  const safe = summary?.safeToSpend || 0;
+  const bankTotal = useMemo(() => bankAccounts.reduce((s, a) => s + Number(a.balance), 0), [bankAccounts]);
+  const bills = useMemo(
+    () => expenses.filter((e) => !isPaidForCycle(e)).reduce((s, e) => s + toMonthly(e.amount, e.frequency), 0),
+    [expenses]
+  );
+  const safe = bankTotal + incomeTotal - bills - reserve;
   const committedPct = incomeTotal > 0 ? Math.min(100, Math.round((bills / incomeTotal) * 100)) : 0;
 
   const upcoming = useMemo(() => upcomingBills(expenses), [expenses]);
@@ -284,10 +294,15 @@ export default function Dashboard() {
         <div style={{ marginTop: 16, height: 8, background: "var(--track)", borderRadius: 99, overflow: "hidden", display: "flex" }}>
           <div style={{ width: `${committedPct}%`, background: "var(--violet)", boxShadow: "0 0 8px var(--violet-soft)" }} />
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 12, color: "var(--ink-soft)" }}>
-          <span><span style={{ color: "var(--violet)" }}>&#9679;</span> Bills {formatCurrency(bills)}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12, fontSize: 12, color: "var(--ink-soft)" }}>
+          <span><span style={{ color: "var(--green)" }}>&#9679;</span> Bank {formatCurrency(bankTotal)}</span>
           <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income {formatCurrency(incomeTotal)}</span>
+          <span><span style={{ color: "var(--violet)" }}>&#9679;</span> Bills owed {formatCurrency(bills)}</span>
+          <span><span style={{ color: "var(--amber)" }}>&#9679;</span> Reserve {formatCurrency(reserve)}</span>
         </div>
+        <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
+          Bank + income \u2212 unpaid bills{reserve > 0 ? " \u2212 reserve" : ""}. Updates as bills are marked paid.
+        </p>
       </div>
 
       {/* Tiles */}
