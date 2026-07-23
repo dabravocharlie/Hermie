@@ -364,9 +364,13 @@ export default function Bills() {
   }, []);
 
   const monthlyIncome = useMemo(() => actualMonthlyTotal(income), [income]);
-  const monthlyExpenses = useMemo(() => actualMonthlyTotal(expenses), [expenses]);
-  const safe = monthlyIncome - monthlyExpenses;
+  const unpaidExpenses = useMemo(
+    () => actualMonthlyTotal(expenses.filter((e) => !isPaidForCycle(e))),
+    [expenses]
+  );
   const bankTotal = useMemo(() => bankAccounts.reduce((s, a) => s + Number(a.balance), 0), [bankAccounts]);
+  const monthlyLeftover = monthlyIncome - unpaidExpenses; // pure cash-flow, no bank/reserve \u2014 what budgetFit expects
+  const safe = bankTotal + monthlyIncome - unpaidExpenses - reserve; // full picture, for display
 
   const sortedExpenses = useMemo(() => {
     return [...expenses].sort((a, b) => {
@@ -452,16 +456,15 @@ export default function Bills() {
             <p className="mono glow-violet" style={{ fontSize: 38, fontWeight: 500, letterSpacing: "-1px", margin: "6px 0 0", color: safe >= 0 ? "var(--violet)" : "var(--amber)" }}>
               {formatCurrency(safe)}
             </p>
-            <div style={{ display: "flex", gap: 20, marginTop: 12 }}>
-              <div>
-                <p style={{ fontSize: 11, color: "var(--ink-soft)" }}>Income</p>
-                <p className="mono" style={{ fontSize: 15, color: "var(--green)" }}>{formatCurrency(monthlyIncome)}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: 11, color: "var(--ink-soft)" }}>Bills</p>
-                <p className="mono" style={{ fontSize: 15, color: "var(--ink)" }}>{formatCurrency(monthlyExpenses)}</p>
-              </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12, fontSize: 12, color: "var(--ink-soft)" }}>
+              <span><span style={{ color: "var(--green)" }}>&#9679;</span> Bank {formatCurrency(bankTotal)}</span>
+              <span><span style={{ color: "var(--green)" }}>&#9679;</span> Income {formatCurrency(monthlyIncome)}</span>
+              <span><span style={{ color: "var(--violet)" }}>&#9679;</span> Bills owed {formatCurrency(unpaidExpenses)}</span>
+              <span><span style={{ color: "var(--amber)" }}>&#9679;</span> Reserve {formatCurrency(reserve)}</span>
             </div>
+            <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 10 }}>
+              Bank + income \u2212 unpaid bills{reserve > 0 ? " \u2212 reserve" : ""}. Same number as your home screen.
+            </p>
           </div>
 
           {/* Income */}
@@ -511,7 +514,7 @@ export default function Bills() {
           </p>
           {wishForm && <div style={{ marginTop: 4 }}><WishForm initial={wishForm.mode === "edit" ? wishForm.item : null} onSave={saveWish} onCancel={() => setWishForm(null)} /></div>}
           {wishlist.map((w) => (
-            <WishRow key={w.id} item={w} fit={budgetFit(w.cost, safe, bankTotal, reserve)}
+            <WishRow key={w.id} item={w} fit={budgetFit(w.cost, monthlyLeftover, bankTotal, reserve)}
               onEdit={() => setWishForm({ mode: "edit", item: w })} onDelete={() => delWish(w.id)}
               onAddToCalendar={addWishToCalendar} />
           ))}
