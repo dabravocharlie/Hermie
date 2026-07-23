@@ -1,5 +1,6 @@
 import express from "express";
 import { pool } from "../db.js";
+import { markBillPaid, markBillUnpaid } from "../lib/bills.js";
 
 const router = express.Router();
 
@@ -56,26 +57,22 @@ router.put("/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
-// Mark a bill paid (for the current cycle). Frontend decides when a bill's
-// paid state should be treated as stale for a new cycle \u2014 see
-// lib/dates.js lastDueOnOrBefore() \u2014 this endpoint just records the timestamp.
+// Mark a bill paid for the current cycle. Optionally deducts its amount
+// from a chosen bank account (account_id in the body) so the numbers stay
+// honest without a separate manual balance update.
 router.post("/:id/paid", async (req, res) => {
-  const { rows } = await pool.query(
-    "UPDATE expenses SET paid_at = now() WHERE id = $1 AND user_id = $2 RETURNING *",
-    [req.params.id, req.userId]
-  );
-  if (!rows.length) return res.status(404).json({ error: "Not found" });
-  res.json(rows[0]);
+  const { account_id } = req.body;
+  const result = await markBillPaid(pool, req.userId, req.params.id, account_id || null);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result.row);
 });
 
-// Undo: mark a bill unpaid.
+// Undo: mark a bill unpaid, crediting back whichever account it was paid
+// from (if any).
 router.post("/:id/unpaid", async (req, res) => {
-  const { rows } = await pool.query(
-    "UPDATE expenses SET paid_at = NULL WHERE id = $1 AND user_id = $2 RETURNING *",
-    [req.params.id, req.userId]
-  );
-  if (!rows.length) return res.status(404).json({ error: "Not found" });
-  res.json(rows[0]);
+  const result = await markBillUnpaid(pool, req.userId, req.params.id);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result.row);
 });
 
 // Delete an expense.

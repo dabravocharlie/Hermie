@@ -2,6 +2,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { callAnthropic, hasKey } from "../lib/anthropic.js";
 import { actualMonthlyTotal, remainingMonthlyTotal } from "../lib/money.js";
+import { markBillPaid } from "../lib/bills.js";
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ You have tools to help the user stay organized. Use them when they ask you to re
 - add_event: add a calendar reminder (IPO date, bill, appointment).
 - add_to_wishlist: add an item they want to purchase (not a stock) to their purchase wishlist.
 - add_expense: add a new recurring bill (housing, transport, utilities, subscriptions, insurance, debt, food, or a short custom category).
-- mark_bill_paid: mark an existing bill paid for the current cycle, matched by name (e.g. "I just paid rent").
+- mark_bill_paid: mark an existing bill paid for the current cycle, matched by name (e.g. "I just paid rent"). If the user has more than one bank account, this may ask which one the payment came from \u2014 relay that question to them, then call it again once they answer.
 - edit_wishlist_item, delete_wishlist_item, mark_wishlist_bought: manage an existing wishlist item, matched by name.
 - set_reserve: update the minimum balance the user wants to always keep untouched (e.g. "keep at least $500 in my account").
 
@@ -107,10 +108,13 @@ const TOOLS = [
   },
   {
     name: "mark_bill_paid",
-    description: "Mark an existing bill as paid for the current cycle, matched by name.",
+    description: "Mark an existing bill as paid for the current cycle, matched by name. If the user has more than one bank account and hasn't said which one it came from, this returns a question for you to relay \u2014 ask them, then call this again with account_name once they answer.",
     input_schema: {
       type: "object",
-      properties: { bill_name: { type: "string", description: "The bill's name, or a close match (e.g. 'electric')." } },
+      properties: {
+        bill_name: { type: "string", description: "The bill's name, or a close match (e.g. 'electric')." },
+        account_name: { type: "string", description: "Which bank account the payment came from, if the user said or you've already asked." },
+      },
       required: ["bill_name"],
     },
   },
@@ -315,8 +319,26 @@ async function runTool(name, input, userId) {
       const { rows } = await pool.query("SELECT id, name FROM expenses WHERE user_id = $1", [userId]);
       const found = fuzzyFindOne(rows, input.bill_name);
       if (found.error) return found.error;
-      await pool.query("UPDATE expenses SET paid_at = now() WHERE id = $1 AND user_id = $2", [found.row.id, userId]);
-      return `Marked "${found.row.name}" as paid.`;
+
+      const accts = await pool.query("SELECT id, name FROM bank_accounts WHERE user_id = $1", [userId]);
+      let accountId = null;
+      if (accts.rows.length === 1) {
+        accountId = accts.rows[0].id;
+      } else if (accts.rows.length > 1) {
+        if (input.account_name) {
+          const acctMatch = fuzzyFindOne(accts.rows, input.account_name);
+          if (acctMatch.error) return acctMatch.error;
+          accountId = acctMatch.row.id;
+        } else {
+          return `Which account did you pay "${found.row.name}" from? Options: ${accts.rows.map((a) => a.name).join(", ")}.`;
+        }
+      }
+      // If there are no bank accounts at all, accountId stays null and the
+      // bill is marked paid without touching any account balance.
+
+      const result = await markBillPaid(pool, userId, found.row.id, accountId);
+      if (result.error) return result.error;
+      return accountId ? `Marked "${found.row.name}" as paid, deducted from that account.` : `Marked "${found.row.name}" as paid.`;
     }
     if (name === "edit_wishlist_item") {
       const { rows } = await pool.query("SELECT * FROM wishlist_items WHERE user_id = $1 AND bought = false", [userId]);

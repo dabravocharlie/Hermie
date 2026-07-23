@@ -84,6 +84,12 @@ const statements = [
   // count real occurrences within a given calendar month.
   `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS next_date DATE`,
 
+  // Which bank account a bill's payment came from (nullable). Lets marking
+  // a bill paid actually deduct from that account, and marking it unpaid
+  // again credit the same amount back \u2014 so the numbers stay honest without
+  // the user having to manually resync their bank balance every time.
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS paid_from_account_id INTEGER`,
+
   // Portfolio holdings (things the user owns).
   `CREATE TABLE IF NOT EXISTS holdings (
     id           SERIAL PRIMARY KEY,

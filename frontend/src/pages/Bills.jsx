@@ -232,30 +232,65 @@ function Row({ left, sub, amount, freq, onEdit, onDelete }) {
   );
 }
 
-function ExpenseRow({ exp, onEdit, onDelete, onTogglePaid }) {
+function ExpenseRow({ exp, bankAccounts, onEdit, onDelete, onTogglePaid }) {
   const meta = categoryMeta(exp.category);
   const paid = isPaidForCycle(exp);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  function handleCheckboxClick() {
+    if (paid) {
+      onTogglePaid(exp, null); // undo needs no picker \u2014 credit-back uses the stored account automatically
+    } else if (bankAccounts.length > 1) {
+      setPickerOpen(true);
+    } else {
+      onTogglePaid(exp, bankAccounts[0]?.id || null); // 0 or 1 accounts \u2014 nothing to actually choose
+    }
+  }
+
+  function choose(accountId) {
+    setPickerOpen(false);
+    onTogglePaid(exp, accountId);
+  }
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid var(--divider)", opacity: paid ? 0.55 : 1 }}>
-      <button
-        onClick={() => onTogglePaid(exp)}
-        aria-label={paid ? "Mark unpaid" : "Mark paid"}
-        style={{
-          width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-          border: `1.5px solid ${paid ? "var(--green)" : "var(--divider)"}`, background: paid ? "var(--green)" : "transparent", color: "#fff", fontSize: 14,
-        }}
-      >
-        {paid ? "\u2713" : ""}
-      </button>
-      <button onClick={onEdit} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
-        <p style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: paid ? "line-through" : "none" }}>{meta.emoji}  {exp.name}</p>
-        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 1 }}>{meta.label}{exp.due_day ? ` \u00B7 due the ${exp.due_day}` : ""}{exp.next_date ? ` \u00B7 anchored ${exp.next_date.slice(0, 10)}` : ""}{exp.autopay ? " \u00B7 autopay" : ""}</p>
-      </button>
-      <button onClick={onEdit} style={{ textAlign: "right", background: "transparent", border: "none", cursor: "pointer" }}>
-        <p className="mono" style={{ fontSize: 15, color: "var(--ink)" }}>{formatCurrency(exp.amount, true)}</p>
-        <p style={{ fontSize: 11, color: "var(--ink-soft)" }}>{freqShort(exp.frequency)}</p>
-      </button>
-      <button onClick={onDelete} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 20, padding: "0 2px", lineHeight: 1 }}>{"\u00D7"}</button>
+    <div style={{ padding: "12px 0", borderBottom: "1px solid var(--divider)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, opacity: paid ? 0.55 : 1 }}>
+        <button
+          onClick={handleCheckboxClick}
+          aria-label={paid ? "Mark unpaid" : "Mark paid"}
+          style={{
+            width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            border: `1.5px solid ${paid ? "var(--green)" : "var(--divider)"}`, background: paid ? "var(--green)" : "transparent", color: "#fff", fontSize: 14,
+          }}
+        >
+          {paid ? "\u2713" : ""}
+        </button>
+        <button onClick={onEdit} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
+          <p style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: paid ? "line-through" : "none" }}>{meta.emoji}  {exp.name}</p>
+          <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 1 }}>{meta.label}{exp.due_day ? ` \u00B7 due the ${exp.due_day}` : ""}{exp.next_date ? ` \u00B7 anchored ${exp.next_date.slice(0, 10)}` : ""}{exp.autopay ? " \u00B7 autopay" : ""}</p>
+        </button>
+        <button onClick={onEdit} style={{ textAlign: "right", background: "transparent", border: "none", cursor: "pointer" }}>
+          <p className="mono" style={{ fontSize: 15, color: "var(--ink)" }}>{formatCurrency(exp.amount, true)}</p>
+          <p style={{ fontSize: 11, color: "var(--ink-soft)" }}>{freqShort(exp.frequency)}</p>
+        </button>
+        <button onClick={onDelete} aria-label="Delete" style={{ background: "transparent", border: "none", color: "var(--ink-soft)", fontSize: 20, padding: "0 2px", lineHeight: 1 }}>{"\u00D7"}</button>
+      </div>
+
+      {pickerOpen && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8, paddingLeft: 34, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>Paid from:</span>
+          {bankAccounts.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => choose(a.id)}
+              style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--card-bd)", background: "var(--card)", color: "var(--violet)", fontWeight: 500 }}
+            >
+              {a.name} ({formatCurrency(a.balance, true)})
+            </button>
+          ))}
+          <button onClick={() => setPickerOpen(false)} style={{ fontSize: 12, color: "var(--ink-soft)", background: "transparent", border: "none" }}>Cancel</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -400,11 +435,11 @@ export default function Bills() {
     await api.del(`/api/expenses/${id}`);
     setExpenses((p) => p.filter((r) => r.id !== id));
   }
-  async function toggleExpensePaid(exp) {
+  async function toggleExpensePaid(exp, accountId) {
     const paid = isPaidForCycle(exp);
     if (paid) await api.post(`/api/expenses/${exp.id}/unpaid`, {});
-    else await api.post(`/api/expenses/${exp.id}/paid`, {});
-    await load();
+    else await api.post(`/api/expenses/${exp.id}/paid`, { account_id: accountId });
+    await load(); // also refreshes bankAccounts, so the deducted/credited balance shows immediately
   }
   async function saveWish(data) {
     if (wishForm?.mode === "edit") await api.put(`/api/wishlist/${wishForm.item.id}`, data);
@@ -491,7 +526,7 @@ export default function Bills() {
             </div>
             {expForm && <div style={{ marginTop: 14 }}><ExpenseForm initial={expForm.mode === "edit" ? expForm.item : null} onSave={saveExpense} onCancel={() => setExpForm(null)} /></div>}
             {sortedExpenses.map((r) => (
-              <ExpenseRow key={r.id} exp={r}
+              <ExpenseRow key={r.id} exp={r} bankAccounts={bankAccounts}
                 onEdit={() => setExpForm({ mode: "edit", item: r })} onDelete={() => delExpense(r.id)}
                 onTogglePaid={toggleExpensePaid} />
             ))}
