@@ -78,6 +78,12 @@ const statements = [
   // frontend lib/dates.js lastDueOnOrBefore().
   `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`,
 
+  // Anchor date for weekly/biweekly bills, mirroring income's next_date.
+  // due_day (above) only makes sense for monthly-cadence bills; a weekly
+  // bill needs an actual date to know which day it recurs on, so we can
+  // count real occurrences within a given calendar month.
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS next_date DATE`,
+
   // Portfolio holdings (things the user owns).
   `CREATE TABLE IF NOT EXISTS holdings (
     id           SERIAL PRIMARY KEY,

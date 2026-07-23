@@ -1,3 +1,5 @@
+import { occurrencesInMonth } from "./dates.js";
+
 // Keep the frontend's money math identical to the backend's.
 export function toMonthly(amount, frequency) {
   const n = Number(amount) || 0;
@@ -10,6 +12,29 @@ export function toMonthly(amount, frequency) {
     default:
       return n;
   }
+}
+
+// The REAL total for one item in a specific calendar month, using its
+// anchor date (next_date) to count actual occurrences of weekly/biweekly
+// items within that month. Falls back to the smoothed average (toMonthly)
+// if the item has no anchor date set yet, so nothing breaks for existing
+// items until you add one.
+export function actualMonthlyAmount(item, year, month) {
+  const amt = Number(item.amount) || 0;
+  const freq = item.frequency;
+  if (freq === "monthly" || freq === "once" || !freq) return amt;
+  const anchor = item.next_date;
+  if (!anchor) return toMonthly(amt, freq);
+  const n = occurrencesInMonth(anchor, freq, year, month);
+  return amt * (n ?? 0);
+}
+
+// Sums actualMonthlyAmount across a list of income sources or expenses for
+// the calendar month containing `from` (defaults to today).
+export function actualMonthlyTotal(items, from = new Date()) {
+  const year = from.getFullYear();
+  const month = from.getMonth();
+  return items.reduce((s, item) => s + actualMonthlyAmount(item, year, month), 0);
 }
 
 // $1,284 style. Pass cents=true for line items like $142.50.

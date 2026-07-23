@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import {
-  toMonthly,
+  actualMonthlyTotal,
   formatCurrency,
   FREQUENCIES,
   freqShort,
@@ -94,8 +94,10 @@ function ExpenseForm({ initial, onSave, onCancel }) {
   const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
   const [frequency, setFrequency] = useState(initial?.frequency || "monthly");
   const [dueDay, setDueDay] = useState(initial?.due_day ? String(initial.due_day) : "");
+  const [nextDate, setNextDate] = useState(initial?.next_date ? initial.next_date.slice(0, 10) : "");
   const [autopay, setAutopay] = useState(initial?.autopay || false);
   const [busy, setBusy] = useState(false);
+  const isWeeklyish = frequency === "weekly" || frequency === "biweekly";
 
   async function submit(e) {
     e.preventDefault();
@@ -103,7 +105,7 @@ function ExpenseForm({ initial, onSave, onCancel }) {
     const cat = category === "custom" ? customLabel.trim() || "other" : category;
     setBusy(true);
     try {
-      await onSave({ name, category: cat, amount, frequency, due_day: dueDay || null, autopay });
+      await onSave({ name, category: cat, amount, frequency, due_day: dueDay || null, autopay, next_date: isWeeklyish ? (nextDate || null) : null });
       onCancel();
     } finally {
       setBusy(false);
@@ -141,6 +143,15 @@ function ExpenseForm({ initial, onSave, onCancel }) {
           </select>
         </div>
       </div>
+      {isWeeklyish && (
+        <div>
+          <label style={labelText}>Next due date (optional)</label>
+          <input style={input} type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
+          <p style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 5 }}>
+            Set this so your monthly totals count the real number of {frequency === "weekly" ? "weekly" : "biweekly"} charges in each month, instead of an average.
+          </p>
+        </div>
+      )}
       <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
         <div style={{ flex: 1 }}>
           <label style={labelText}>Due day (optional)</label>
@@ -237,7 +248,7 @@ function ExpenseRow({ exp, onEdit, onDelete, onTogglePaid }) {
       </button>
       <button onClick={onEdit} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
         <p style={{ fontSize: 15, fontWeight: 500, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: paid ? "line-through" : "none" }}>{meta.emoji}  {exp.name}</p>
-        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 1 }}>{meta.label}{exp.due_day ? ` \u00B7 due the ${exp.due_day}` : ""}{exp.autopay ? " \u00B7 autopay" : ""}</p>
+        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 1 }}>{meta.label}{exp.due_day ? ` \u00B7 due the ${exp.due_day}` : ""}{exp.next_date ? ` \u00B7 anchored ${exp.next_date.slice(0, 10)}` : ""}{exp.autopay ? " \u00B7 autopay" : ""}</p>
       </button>
       <button onClick={onEdit} style={{ textAlign: "right", background: "transparent", border: "none", cursor: "pointer" }}>
         <p className="mono" style={{ fontSize: 15, color: "var(--ink)" }}>{formatCurrency(exp.amount, true)}</p>
@@ -352,8 +363,8 @@ export default function Bills() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const monthlyIncome = useMemo(() => income.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0), [income]);
-  const monthlyExpenses = useMemo(() => expenses.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0), [expenses]);
+  const monthlyIncome = useMemo(() => actualMonthlyTotal(income), [income]);
+  const monthlyExpenses = useMemo(() => actualMonthlyTotal(expenses), [expenses]);
   const safe = monthlyIncome - monthlyExpenses;
   const bankTotal = useMemo(() => bankAccounts.reduce((s, a) => s + Number(a.balance), 0), [bankAccounts]);
 

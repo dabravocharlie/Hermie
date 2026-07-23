@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api.js";
 import Wings from "../components/Wings.jsx";
-import { formatCurrency, categoryMeta, toMonthly } from "../lib/money.js";
+import { formatCurrency, categoryMeta, actualMonthlyTotal } from "../lib/money.js";
 import { upcomingBills, upcomingPaydays, dueLabel, parseDateLocal, daysUntil, whenLabel, isPaidForCycle } from "../lib/dates.js";
 import { buildInsight } from "../lib/insight.js";
 
@@ -234,10 +234,10 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const incomeTotal = summary?.monthlyIncome || 0;
+  const incomeTotal = useMemo(() => actualMonthlyTotal(income), [income]);
   const bankTotal = useMemo(() => bankAccounts.reduce((s, a) => s + Number(a.balance), 0), [bankAccounts]);
   const bills = useMemo(
-    () => expenses.filter((e) => !isPaidForCycle(e)).reduce((s, e) => s + toMonthly(e.amount, e.frequency), 0),
+    () => actualMonthlyTotal(expenses.filter((e) => !isPaidForCycle(e))),
     [expenses]
   );
   const safe = bankTotal + incomeTotal - bills - reserve;

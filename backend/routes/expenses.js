@@ -14,11 +14,11 @@ router.get("/", async (req, res) => {
 
 // Add an expense.
 router.post("/", async (req, res) => {
-  const { name, category, amount, frequency, due_day, autopay } = req.body;
+  const { name, category, amount, frequency, due_day, autopay, next_date } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
   const { rows } = await pool.query(
-    `INSERT INTO expenses (user_id, name, category, amount, frequency, due_day, autopay)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    `INSERT INTO expenses (user_id, name, category, amount, frequency, due_day, autopay, next_date)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
     [
       req.userId,
       name.trim(),
@@ -27,6 +27,7 @@ router.post("/", async (req, res) => {
       frequency || "monthly",
       due_day ? Number(due_day) : null,
       Boolean(autopay),
+      next_date || null,
     ]
   );
   res.status(201).json(rows[0]);
@@ -34,11 +35,11 @@ router.post("/", async (req, res) => {
 
 // Update an expense.
 router.put("/:id", async (req, res) => {
-  const { name, category, amount, frequency, due_day, autopay } = req.body;
+  const { name, category, amount, frequency, due_day, autopay, next_date } = req.body;
   const { rows } = await pool.query(
     `UPDATE expenses
-       SET name = $1, category = $2, amount = $3, frequency = $4, due_day = $5, autopay = $6
-     WHERE id = $7 AND user_id = $8 RETURNING *`,
+       SET name = $1, category = $2, amount = $3, frequency = $4, due_day = $5, autopay = $6, next_date = $7
+     WHERE id = $8 AND user_id = $9 RETURNING *`,
     [
       name,
       category || "other",
@@ -46,6 +47,7 @@ router.put("/:id", async (req, res) => {
       frequency || "monthly",
       due_day ? Number(due_day) : null,
       Boolean(autopay),
+      next_date || null,
       req.params.id,
       req.userId,
     ]

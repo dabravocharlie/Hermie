@@ -1,7 +1,7 @@
 import express from "express";
 import { pool } from "../db.js";
 import { callAnthropic, hasKey } from "../lib/anthropic.js";
-import { toMonthly } from "../lib/money.js";
+import { actualMonthlyTotal } from "../lib/money.js";
 
 const router = express.Router();
 
@@ -160,8 +160,8 @@ const TOOLS = [
 // whether they're on the paid tier (shapes the system prompt).
 async function buildContext(userId) {
   const [inc, exp, hold, watch, events, notes, wish, acct, banks] = await Promise.all([
-    pool.query("SELECT name, amount, frequency FROM income_sources WHERE user_id = $1", [userId]),
-    pool.query("SELECT name, category, amount, frequency, due_day FROM expenses WHERE user_id = $1", [userId]),
+    pool.query("SELECT name, amount, frequency, next_date FROM income_sources WHERE user_id = $1", [userId]),
+    pool.query("SELECT name, category, amount, frequency, due_day, next_date FROM expenses WHERE user_id = $1", [userId]),
     pool.query("SELECT symbol, shares, cost_basis FROM holdings WHERE user_id = $1", [userId]),
     pool.query("SELECT symbol FROM watchlist WHERE user_id = $1", [userId]),
     pool.query("SELECT title, type, event_date FROM calendar_events WHERE user_id = $1 ORDER BY event_date ASC LIMIT 8", [userId]),
@@ -171,8 +171,8 @@ async function buildContext(userId) {
     pool.query("SELECT name, balance FROM bank_accounts WHERE user_id = $1 ORDER BY created_at ASC", [userId]),
   ]);
 
-  const monthlyIncome = inc.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
-  const monthlyExpenses = exp.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
+  const monthlyIncome = actualMonthlyTotal(inc.rows);
+  const monthlyExpenses = actualMonthlyTotal(exp.rows);
   const monthlyLeft = monthlyIncome - monthlyExpenses;
   const isPaid = acct.rows[0]?.is_paid || false;
   const reserve = Number(acct.rows[0]?.reserve_amount) || 0;

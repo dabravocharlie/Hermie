@@ -1,6 +1,10 @@
+import { occurrencesInMonth } from "./dates.js";
+
 // Converts an amount at a given frequency into its monthly equivalent, so
 // weekly, bi-weekly, and monthly items can be summed on the same footing.
-// weekly: 52 pay periods / 12 months. biweekly: 26 / 12.
+// This is a SMOOTHED AVERAGE (weekly: 52 pay periods / 12 months. biweekly:
+// 26 / 12) \u2014 it does not correspond to any specific calendar month. Used as
+// a fallback when an item has no anchor date to compute a real count from.
 export function toMonthly(amount, frequency) {
   const n = Number(amount) || 0;
   switch (frequency) {
@@ -12,4 +16,26 @@ export function toMonthly(amount, frequency) {
     default:
       return n;
   }
+}
+
+// The REAL total for one item in a specific calendar month, using its
+// anchor date (next_date) to count actual occurrences of weekly/biweekly
+// items within that month. Falls back to the smoothed average if the item
+// has no anchor date set yet.
+export function actualMonthlyAmount(item, year, month) {
+  const amt = Number(item.amount) || 0;
+  const freq = item.frequency;
+  if (freq === "monthly" || freq === "once" || !freq) return amt;
+  const anchor = item.next_date;
+  if (!anchor) return toMonthly(amt, freq);
+  const n = occurrencesInMonth(anchor, freq, year, month);
+  return amt * (n ?? 0);
+}
+
+// Sums actualMonthlyAmount across a list of income sources or expenses for
+// the calendar month containing `from` (defaults to today).
+export function actualMonthlyTotal(items, from = new Date()) {
+  const year = from.getFullYear();
+  const month = from.getMonth();
+  return items.reduce((s, item) => s + actualMonthlyAmount(item, year, month), 0);
 }

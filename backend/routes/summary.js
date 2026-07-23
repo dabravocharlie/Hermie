@@ -1,25 +1,26 @@
 import express from "express";
 import { pool } from "../db.js";
-import { toMonthly } from "../lib/money.js";
+import { actualMonthlyTotal } from "../lib/money.js";
 
 const router = express.Router();
 
-// Monthly cash-flow summary for the signed-in user. Powers the Bills page
-// totals now, and the Dashboard "safe to spend" number in Phase 3.
+// Monthly cash-flow summary for the signed-in user, using the REAL total
+// for the current calendar month (not a smoothed annualized average) \u2014
+// so this agrees with what the app shows elsewhere.
 router.get("/", async (req, res) => {
   const [inc, exp] = await Promise.all([
-    pool.query("SELECT amount, frequency FROM income_sources WHERE user_id = $1", [req.userId]),
-    pool.query("SELECT amount, frequency, category FROM expenses WHERE user_id = $1", [req.userId]),
+    pool.query("SELECT amount, frequency, next_date FROM income_sources WHERE user_id = $1", [req.userId]),
+    pool.query("SELECT amount, frequency, category, next_date FROM expenses WHERE user_id = $1", [req.userId]),
   ]);
 
-  const monthlyIncome = inc.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
-  const monthlyExpenses = exp.rows.reduce((s, r) => s + toMonthly(r.amount, r.frequency), 0);
+  const monthlyIncome = actualMonthlyTotal(inc.rows);
+  const monthlyExpenses = actualMonthlyTotal(exp.rows);
 
-  // Spend by category (monthly), useful for later breakdowns.
+  // Spend by category (this month, real totals), useful for later breakdowns.
   const byCategory = {};
   for (const r of exp.rows) {
     const key = r.category || "other";
-    byCategory[key] = (byCategory[key] || 0) + toMonthly(r.amount, r.frequency);
+    byCategory[key] = (byCategory[key] || 0) + (actualMonthlyTotal([r]));
   }
 
   res.json({
